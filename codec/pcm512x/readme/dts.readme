@@ -1,0 +1,12 @@
+example for dts:
+	ad83586b_30: ad83586b_30@30 {
+		compatible = "ESMT, ad83586b";
+		#sound-dai-cells = <0>;
+		reg = <0x30>;
+		// reset_pin  /pd
+		// Set GPIOAO_12 hi
+		reset_pin2 = <&gpio_ao GPIOAO_12 1>;
+		reset_pin = <&gpio_ao GPIOAO_4 1>;
+		power_down_pin = <&gpio_ao GPIOAO_7 1>;
+		status = "okay";
+	};

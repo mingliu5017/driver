@@ -1,0 +1,90 @@
+example for dts:
+ is31fl3236a: is31f3236a@0x78 {
+		compatible = "issi,is31fl3236";
+		reg = <0x3c>;
+		status = "okay";
+		led1_r {
+			label="LED1_R";
+			reg_offset = <1>;
+		};
+		led1_g {
+			label="LED1_G";
+			reg_offset = <2>;
+		};
+		led1_b {
+			label="LED1_B";
+			reg_offset = <3>;
+		};
+		led2_r {
+			label="LED2_R";
+			reg_offset = <4>;
+		};
+		led2_g {
+			label="LED2_G";
+			reg_offset = <5>;
+		};
+		led2_b {
+			label="LED2_B";
+			reg_offset = <6>;
+		};
+		led3_r {
+			label="LED3_R";
+			reg_offset = <7>;
+		};
+		led3_g {
+			label="LED3_G";
+			reg_offset = <8>;
+		};
+		led3_b {
+			label="LED3_B";
+			reg_offset = <9>;
+		};
+		led4_r {
+			label="LED4_R";
+			reg_offset = <10>;
+		};
+		led4_g {
+			label="LED4_G";
+			reg_offset = <11>;
+		};
+		led4_b {
+			label="LED4_B";
+			reg_offset = <12>;
+		};
+                led_bt_r {
+                        label="BT_R";
+                        reg_offset = <13>;
+                };
+                led_bt_g {
+                        label="BT_G";
+                        reg_offset = <14>;
+                };
+                led_bt_b {
+                        label="BT_B";
+                        reg_offset = <15>;
+                };
+                led_battery_4 {
+                        label="BAT_4";
+                        reg_offset = <16>;
+                };
+                led_battery_3 { 
+                        label="BAT_3";
+                        reg_offset = <17>;
+                };
+                led_battery_2 {
+                        label="BAT_2";
+                        reg_offset = <18>;
+                };
+                led_battery_1 {
+                        label="BAT_1";
+                        reg_offset = <19>;
+                };
+                led_battery_0 {
+                        label="BAT_0";
+                        reg_offset = <20>;
+                };
+                led_power {
+                        label="power";
+                        reg_offset = <21>;
+                };
+	};

@@ -1,0 +1,66 @@
+From 2c2aedb45cf25abef34930c3e1c06a5fd7f3d9d1 Mon Sep 17 00:00:00 2001
+From: Weiguang Ruan <Weiguang.ruan@amlogic.com>
+Date: Fri, 23 Nov 2018 11:29:30 +0800
+Subject: [PATCH] wifi-fw: add qca9377 bt support [3/3]
+
+PD#SH-24
+
+Problem:
+1. we have not copy qca9377 bt fw to target dir
+2. we have no qca9377 bt initial commad in bluez_tool.sh
+
+Solution:
+1.add copy command
+2.add initial command
+
+Verify:
+S400
+
+Change-Id: I29c826319157a9e0fa16879ba648f41ee25a5204
+Signed-off-by: Weiguang Ruan <Weiguang.ruan@amlogic.com>
+---
+
+diff --git a/package/bluez5_utils/bluez_tool.sh b/package/bluez5_utils/bluez_tool.sh
+index 8096925..676ae6f 100755
+--- a/package/bluez5_utils/bluez_tool.sh
++++ b/package/bluez5_utils/bluez_tool.sh
+@@ -51,6 +51,13 @@
+ 	rtk_hciattach -n -s 115200 /dev/ttyS1 rtk_h5 &
+ }
+ 
++qca_bt_init()
++{
++	modprobe hci_uart
++	usleep 300000
++	hciattach -s 115200 /dev/ttyS1 qca 2> /dev/null
++}
++
+ A2DP_service()
+ {
+ 	echo "|--bluez a2dp-sink/hfp-hf service--|"
+@@ -125,6 +132,8 @@
+ 
+ 	if [ $device = "rtk" ];then
+ 		realtek_bt_init
++	elif [ $device = "qca" ];then
++		qca_bt_init
+ 	else
+ 		modprobe hci_uart
+ 		usleep 300000
+diff --git a/package/wifi-fw/wifi_fw.mk b/package/wifi-fw/wifi_fw.mk
+index 6e55ba1..d064a38 100644
+--- a/package/wifi-fw/wifi_fw.mk
++++ b/package/wifi-fw/wifi_fw.mk
+@@ -441,10 +441,12 @@
+ 
+ ifeq ($(WIFI_MODULE),qca9377)
+ define WIFI_FW_INSTALL_TARGET_CMDS
++	mkdir -p $(TARGET_DIR)/lib/firmware/qca
+ 	mkdir -p $(TARGET_DIR)/lib/firmware/qca9377
+ 	mkdir -p $(TARGET_DIR)/lib/firmware/qca9377/wlan
+ 	$(INSTALL) -D -m 0644 $(@D)/qcom/config/qca9377/wifi_49/*.bin $(TARGET_DIR)/lib/firmware/qca9377/
+ 	$(INSTALL) -D -m 0644 $(@D)/qcom/config/qca9377/wifi_49/wlan/* $(TARGET_DIR)/lib/firmware/qca9377/wlan/
++	$(INSTALL) -D -m 0644 $(@D)/qcom/config/qca9377/bt_bluez/* $(TARGET_DIR)/lib/firmware/qca/
+ endef
+ endif
+ 

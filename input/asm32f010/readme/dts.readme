@@ -1,0 +1,13 @@
+example for dts:
+	asm32f010: asm32f010@11 {
+		compatible = "aml, ledring";
+		reg = <0x11>;
+        mode = <1>; /*0: 6-led 1: 4key+2led */
+        key_num = <10>;
+        led_dev_name = "aml_ledring";
+        key_dev_name = "aml_pca_key";
+        key_name = "mute", "pause", "vol+", "vol-", "alink", "ftest", "v-&pause", "v+&pause", "v+&mute", "v-&mute";
+        key_value = <200 201 202 203 204 205 206 207 208 209>;
+		interrupt_pin = <&gpio       GPIOZ_10       GPIO_ACTIVE_HIGH>;
+		status = "disable";
+	};

@@ -1,0 +1,11 @@
+example for dts:
+    lcd_display {
+	      status = "okay";
+         compatible = "amlogic, lcd-display";
+          lcd-spi-bl = <&gpio GPIOZ_5 GPIO_ACTIVE_HIGH>;
+		  lcd-spi-cs = <&gpio GPIOZ_3 GPIO_ACTIVE_HIGH>;
+		  lcd-spi-rst = <&gpio_ao GPIOAO_13 GPIO_ACTIVE_HIGH>;
+		  lcd-spi-a0 = <&gpio GPIOA_20 GPIO_ACTIVE_HIGH>;
+		  lcd-spi-clk = <&gpio GPIOZ_0 GPIO_ACTIVE_HIGH>;
+    	  lcd-spi-data = <&gpio GPIOZ_1 GPIO_ACTIVE_HIGH>;
+      };

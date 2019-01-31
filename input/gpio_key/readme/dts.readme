@@ -1,0 +1,17 @@
+example for dts:
+	gpio_keypad{
+               compatible = "amlogic, gpio_keypad";
+               status = "disable";
+               scan_period = <20>;
+               key_num = <5>;
+               key_name = "mic-mute", "vol+", "vol-", "bt-pair", "play/pause";
+               key_code = <106 115 114 116 105>;
+               key_pin = <&gpio_ao GPIOAO_8 GPIO_ACTIVE_LOW 
+                          &gpio GPIOZ_1 GPIO_ACTIVE_LOW 
+                          &gpio GPIOZ_10 GPIO_ACTIVE_LOW 
+                          &gpio GPIOZ_2 GPIO_ACTIVE_LOW 
+                          &gpio GPIOZ_3 GPIO_ACTIVE_LOW>;
+               interrupts = <0 70 1
+                             0 71 2>;
+               interrupt-names = "irq_keyup", "irq_keydown";
+    };

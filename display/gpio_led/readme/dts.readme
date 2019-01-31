@@ -1,0 +1,19 @@
+example for dts:
+leds {
+	compatible="gpio-leds";
+	status="okay";
+	remote-led {
+		label="remote-led";
+		gpios=<&gpio_ao GPIOAO_9 GPIO_ACTIVE_HIGH>;
+	};
+	sys-led {
+		label="sys-led";
+		gpios=<&gpio_ao GPIOAO_10 GPIO_ACTIVE_HIGH>;
+		linux,default-trigger="timer";
+	};
+	net-led {
+		label="net-led";
+		gpios=<&gpio GPIOX_12 GPIO_ACTIVE_HIGH>;
+		defalt-state ="on";
+	};
+};

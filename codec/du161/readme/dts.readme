@@ -1,0 +1,8 @@
+example for dts:
+	du161: du161@26 {
+		compatible = "MVSILICON,du161";
+		#sound-dai-cells = <0>;
+		reg = <0x2b>;
+		status = "okay";
+		mute-gpio = <&gpio_ao GPIOAO_6 GPIO_ACTIVE_LOW>;
+	};

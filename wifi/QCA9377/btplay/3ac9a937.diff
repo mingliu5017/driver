@@ -1,0 +1,32 @@
+From 3ac9a93756892dcc877839a693018b51b9ba8afa Mon Sep 17 00:00:00 2001
+From: Weiguang Ruan <Weiguang.ruan@amlogic.com>
+Date: Fri, 23 Nov 2018 11:23:55 +0800
+Subject: [PATCH] bt: add qca9377 bt support [2/3]
+
+PD#SH-24
+
+Problem:
+we have no qca9377 bt fw for bluez
+
+Solution:
+get fw from qualcomm
+
+Verify:
+S400
+
+Change-Id: I6d3577a501fa395b61fc2ee7f2007ea849628ade
+Signed-off-by: Weiguang Ruan <Weiguang.ruan@amlogic.com>
+---
+
+diff --git a/qcom/config/qca9377/bt_bluez/nvm_tlv_tf_1.1.bin b/qcom/config/qca9377/bt_bluez/nvm_tlv_tf_1.1.bin
+new file mode 100644
+index 0000000..e79220e
+--- /dev/null
++++ b/qcom/config/qca9377/bt_bluez/nvm_tlv_tf_1.1.bin
+Binary files differ
+diff --git a/qcom/config/qca9377/bt_bluez/rampatch_tlv_tf_1.1.tlv b/qcom/config/qca9377/bt_bluez/rampatch_tlv_tf_1.1.tlv
+new file mode 100644
+index 0000000..7faca75
+--- /dev/null
++++ b/qcom/config/qca9377/bt_bluez/rampatch_tlv_tf_1.1.tlv
+Binary files differ

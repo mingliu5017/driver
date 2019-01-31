@@ -1,0 +1,1 @@
+tfa98xx.cnt文件要放在/lib/firmware下，S45asound需要添加modprobe snd-soc-tfa98xx

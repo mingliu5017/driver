@@ -1,0 +1,6 @@
+config BR2_PACKAGE_BLUEZ_ALSA
+	bool "blue-alas"
+	depends on BR2_PACKAGE_BLUEZ5_UTILS
+	select BR2_PACKAGE_SBC
+	help
+		audio plugins for bluez

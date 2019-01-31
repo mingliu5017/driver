@@ -1,0 +1,947 @@
+commit 0340aadefe7e337ab8e21771ab562b93ef9b4458
+Author: jihui.zhang <jihui.zhang@amlogic.com>
+Date:   Mon Jun 4 19:45:46 2018 +0800
+
+    wifi/bt use 8723ds
+
+diff --git a/board/amlogic/common/rootfs/rootfs-49-audio/etc/init.d/S03datamount b/board/amlogic/common/rootfs/rootfs-49-audio/etc/init.d/S03datamount
+index 12a4eb5..dcccdb8 100755
+--- a/board/amlogic/common/rootfs/rootfs-49-audio/etc/init.d/S03datamount
++++ b/board/amlogic/common/rootfs/rootfs-49-audio/etc/init.d/S03datamount
+@@ -38,7 +38,7 @@ fi
+ 
+ ubiformat /dev/mtd${data_mtd_number}
+ ubiattach /dev/ubi_ctrl -m ${data_mtd_number}
+-ubimkvol /dev/ubi1 -s 160MiB -N data
++ubimkvol /dev/ubi1 -s 150MiB -N data
+ mount -t ubifs /dev/ubi1_0 /data	
+ }
+ 
+diff --git a/board/amlogic/common/rootfs/rootfs-49-audio/etc/init.d/S42wifi b/board/amlogic/common/rootfs/rootfs-49-audio/etc/init.d/S42wifi
+index bf5f9c6..15ae848 100755
+--- a/board/amlogic/common/rootfs/rootfs-49-audio/etc/init.d/S42wifi
++++ b/board/amlogic/common/rootfs/rootfs-49-audio/etc/init.d/S42wifi
+@@ -20,11 +20,13 @@ NAME4=dhcpcd
+ DAEMON4=/usr/sbin/$NAME4
+ PIDFILE4=/var/run/${NAME4}-wlan0.pid
+ 
++RTK_FLAG_FILE=/etc/wifi/rtk_station_mode
++RTK_WIFI_FLAG="NONE"
+ ap_name_file=/etc/wifi/ap_name
+ function hostapd_conf(){
+     while true
+     do
+-        cat /sys/class/net/wlan1/address | sed 's/\://g' > /etc/wifi/ap_name
++        cat /sys/class/net/$1/address | sed 's/\://g' > /etc/wifi/ap_name
+         if [ -f $ap_name_file ];then
+             break
+         fi
+@@ -34,7 +36,7 @@ function hostapd_conf(){
+     password=12345678
+ 
+     echo 0 > /etc/hostapd_temp.conf
+-    echo "interface=wlan1" > /etc/hostapd_temp.conf
++    echo "interface=$1" > /etc/hostapd_temp.conf
+     echo "driver=nl80211" >> /etc/hostapd_temp.conf
+     echo "ctrl_interface=/var/run/hostapd" >> /etc/hostapd_temp.conf
+     echo "ssid=${ssid}" >> /etc/hostapd_temp.conf
+@@ -66,10 +68,20 @@ if [ $? -eq 0 ]; then
+ 			sleep 1
+ 		fi
+ 	done
++
++	if [[ "${RTK_WIFI_FLAG}" == "TRUE" ]]
++	then
++		if [ ${cnt} -eq 20 ]
++		then
++#			rm ${RTK_FLAG_FILE}
++			sync
++		fi
++	fi
+ fi
+ }
+ 
+-function wifi_setup(){
++function move_skt()
++{
+ skt_board=`cat /proc/device-tree/amlogic-dt-id`
+ case ${skt_board} in
+ 	"axg_a113d_skt_v1")
+@@ -79,32 +91,109 @@ case ${skt_board} in
+ 		exit 0
+ 		;;
+ esac
++}
+ 
++function init_wifi_env()
++{
+ killall hostapd
+ killall wpa_supplicant
+ killall dnsmasq
+ killall dhcpcd
+-echo "start wifi station mode load driver and setup......"
+-$MULTI_WIFI station 1
++}
+ 
++
++function hostapd_conf_pre()
++{
++    hostapd_conf $1
++    hostapd /etc/hostapd_temp.conf -e /etc/entropy.bin &
++    ifconfig $1 192.168.2.1
++    DONE=`start-stop-daemon -S -m -p $PIDFILE3  -x $DAEMON3  -- -i$1  --dhcp-option=3,192.168.2.1 --dhcp-range=192.168.2.50,192.168.2.200,12h -p100`
++}
++
++function wifi_setup(){
+ DONE=`ifconfig wlan0 up > /dev/null`
+ ifconfig wlan0 &> /dev/null
+-DONE=`start-stop-daemon -S -m -p $PIDFILE1 -b -x $DAEMON1 -- -Dnl80211 -iwlan0 -c/etc/wpa_supplicant.conf`
++
+ if [ $? -eq 0 ]; then
+-    iw wlan0 interface add wlan1 type managed
+-    hostapd_conf
+-    hostapd /etc/hostapd_temp.conf -e /etc/entropy.bin &
+-    ifconfig wlan1 192.168.2.1
+-    DONE=`start-stop-daemon -S -m -p $PIDFILE3  -x $DAEMON3  -- -iwlan1  --dhcp-option=3,192.168.2.1 --dhcp-range=192.168.2.50,192.168.2.200,12h -p100`
++	if [[ "$1" == "both" ]]
++	then
++		DONE=`start-stop-daemon -S -m -p $PIDFILE1 -b -x $DAEMON1 -- -Dnl80211 -iwlan0 -c/etc/wpa_supplicant.conf`
++    	iw wlan0 interface add wlan1 type managed
++		hostapd_conf_pre wlan1
++	elif [[ "$1" == "station" ]]
++	then
++		DONE=`start-stop-daemon -S -m -p $PIDFILE1 -b -x $DAEMON1 -- -Dnl80211 -iwlan0 -c/etc/wpa_supplicant.conf`
++	elif [[ "$1" == "ap" ]]
++	then
++		hostapd_conf_pre wlan0
++	fi
+ fi
+ ifconfig wlan0 &> /dev/null
+ 
+-start_sta &
++if [[ "$1" == "both" || "$1" == "station" ]]
++then
++	start_sta
++fi
++}
++function rtk_wifi_ap()
++{
++	wifi_setup ap
++}
++
++
++function rtk_wifi_station()
++{
++	wifi_setup station
++		if [ ! -f ${RTK_FLAG_FILE} ]
++		then
++			init_wifi_env
++			rtk_wifi_ap
++		fi
++
++}
++
++function wifi_rtk()
++{
++	if [ -f ${RTK_FLAG_FILE} ]	
++	then
++		 rtk_wifi_station
++	else
++		rtk_wifi_ap
++	fi
++}
++
++function wifi_start()
++{
++move_skt
++
++init_wifi_env
++
++echo "start wifi station mode load driver and setup......"
++
++#if [[ "$1" == "both" || "$1" == "station" ]]
++#then
++$MULTI_WIFI station 1
++#else
++#$MULTI_WIFI ap 1
++#fi
++
++wifi_chip_id_vendor="/sys/bus/mmc/devices/sdio:0001/sdio:0001:1/vendor"
++wifi_chip_id=`cat ${wifi_chip_id_vendor}`
++case "${wifi_chip_id}" in
++	0x02d0)
++		wifi_setup both
++		;;
++	0x024c)
++		RTK_WIFI_FLAG="TRUE"
++		wifi_rtk
++		;;
++esac
+ }
+ 
+ case "$1" in
+     start)
+-		wifi_setup &
++		touch ${RTK_FLAG_FILE}
++		wifi_start &
+         ;;
+     stop)
+         killall hostapd
+diff --git a/board/amlogic/mesonaxg_s420/rootfs/etc/adckey/adckey_function.sh b/board/amlogic/mesonaxg_s420/rootfs/etc/adckey/adckey_function.sh
+index dbfc3cf..a63ace1 100755
+--- a/board/amlogic/mesonaxg_s420/rootfs/etc/adckey/adckey_function.sh
++++ b/board/amlogic/mesonaxg_s420/rootfs/etc/adckey/adckey_function.sh
+@@ -43,20 +43,27 @@ wifiSmartConfig()
+ ble_wifi_setup()
+ {
+ 	echo "ble config for wifisetup"
+-	rm /etc/bsa/config/wifi_tool.sh
+-	ln /var/www/cgi-bin/wifi/wifi_tool.sh  /etc/bsa/config/wifi_tool.sh
++#	rm /etc/bsa/config/wifi_tool.sh
++#	ln /var/www/cgi-bin/wifi/wifi_tool.sh  /etc/bsa/config/wifi_tool.sh
++#	killall btgatt-server
+ 	local app1_id=`ps | grep "app_musicBox" | awk '{print $1}'`
+ 	kill -9 $app1_id
+ 	local app2_id=`ps | grep "app_ble_wifi_setup" | awk '{print $1}'`
+ 	kill -9 $app2_id
+-	if [ ! -f "/etc/bsa/config/wifi_status" ]; then
+-		touch /etc/bsa/config/wifi_status
+-		chmod 644 /etc/bsa/config/wifi_status
++	if [ ! -f "/tmp/wifi_status" ]; then
++		touch /tmp/wifi_status
++		chmod 644 /tmp/wifi_status
+ 	fi
+-	echo 0 > /etc/bsa/config/wifi_status
+-	cd /etc/bsa/config
+-	app_ble_wifi_setup &
+-	app_musicBox  ble_mode &
++	echo 0 > /tmp/wifi_status
++
++	hciconfig hci0
++#	if [ $? -eq 0 ];then
++		bluez_tool.sh restart ble rtk
++#	else
++#		cd /etc/bsa/config
++#		app_ble_wifi_setup &
++#		app_musicBox  ble_mode &
++#	fi
+ }
+ 
+ case $1 in
+diff --git a/configs/mesonaxg_s420_32_release_defconfig b/configs/mesonaxg_s420_32_release_defconfig
+index d183859..37454fc 100755
+--- a/configs/mesonaxg_s420_32_release_defconfig
++++ b/configs/mesonaxg_s420_32_release_defconfig
+@@ -303,11 +303,12 @@ BR2_PACKAGE_BOOST=y
+ BR2_PACKAGE_LIBEVENT=y
+ BR2_PACKAGE_CJSON=y
+ BR2_PACKAGE_LIBXSLT=y
+-BR2_PACKAGE_BLUEZ_UTILS=y
+-BR2_PACKAGE_BLUEZ_UTILS_COMPAT=y
+-BR2_PACKAGE_BLUEZ_UTILS_AUDIO=y
+-BR2_PACKAGE_BLUEZ_UTILS_USB=y
+-BR2_PACKAGE_BLUEZ_UTILS_GATT=y
++BR2_PACKAGE_BLUEZ5_UTILS=y
++BR2_PACKAGE_BLUEZ5_UTILS_OBEX=y
++BR2_PACKAGE_BLUEZ5_UTILS_CLIENT=y
++# BR2_PACKAGE_BLUEZ5_UTILS_GATTTOOL is not set
++#BR2_PACKAGE_BLUEZ5_UTILS_EXPERIMENTAL=y
++BR2_PACKAGE_BLUEZ_ALSA=y
+ BR2_PACKAGE_DHCPCD=y
+ BR2_PACKAGE_DNSMASQ=y
+ BR2_PACKAGE_DNSMASQ_TFTP=y
+@@ -328,11 +329,13 @@ BR2_TARGET_ROOTFS_CPIO_GZIP=y
+ BR2_TARGET_ROOTFS_CPIO_UIMAGE=y
+ BR2_TARGET_ROOTFS_INITRAMFS_LIST="board/amlogic/common/initramfs/initramfs-49/ramfslist-32-ubi-release"
+ BR2_TARGET_ROOTFS_UBIFS=y
+-BR2_TARGET_ROOTFS_UBIFS_LEBSIZE=0x1f000
+-BR2_TARGET_ROOTFS_UBIFS_MAXLEBCNT=2212
++BR2_TARGET_ROOTFS_UBIFS_LEBSIZE=0x3E000
++BR2_TARGET_ROOTFS_UBIFS_MAXLEBCNT=1120
+ BR2_TARGET_ROOTFS_UBIFS_OPTS="-v"
+ BR2_TARGET_ROOTFS_UBI=y
+-BR2_TARGET_ROOTFS_UBI_SUBSIZE=2048
++BR2_TARGET_ROOTFS_UBI_SUBSIZE=4096
++BR2_TARGET_ROOTFS_UBIFS_MINIOSIZE=0x1000
++BR2_TARGET_ROOTFS_UBI_PEBSIZE=0x40000
+ #BR2_TARGET_ROOTFS_EXT2=y
+ #BR2_TARGET_ROOTFS_EXT2_4=y
+ #BR2_TARGET_ROOTFS_EXT2_BLOCKS=2097152
+@@ -417,10 +420,18 @@ BR2_PACKAGE_WIFI_FW_WIFI_MODULE="bcm4356 AP6398"
+ #BR2_PACKAGE_RTK8822BU_STANDALONE=y
+ #BR2_PACKAGE_RTK8822BU_GIT_VERSION="m-amlogic"
+ #BR2_PACKAGE_RTK8822BU_LOCAL_PATH="$(TOPDIR)/../hardware/aml-3.14/wifi/realtek/drivers/8822bu"
+-#BR2_PACKAGE_REALTEK_BT=y
+-#BR2_PACKAGE_REALTEK_BT_LOCAL_PATH="$(TOPDIR)/../hardware/aml-4.9/realtek/bluetooth"
+-#BR2_PACKAGE_REALTEK_UART_BT=y
+-#BR2_PACKAGE_REALTEK_USB_BT=y
++
++BR2_PACKAGE_RTK8723DS=y
++BR2_PACKAGE_RTK8723DS_LOCAL=y
++BR2_PACKAGE_RTK8723DS_STANDALONE=y
++BR2_PACKAGE_RTK8723DS_GIT_VERSION="n-amlogic"
++BR2_PACKAGE_RTK8723DS_LOCAL_PATH="$(TOPDIR)/../hardware/aml-4.9/wifi/realtek/drivers/8723ds"
++
++BR2_PACKAGE_REALTEK_BT=y
++BR2_PACKAGE_REALTEK_BT_LOCAL_PATH="$(TOPDIR)/../hardware/aml-4.9/realtek/bluetooth"
++BR2_PACKAGE_REALTEK_UART_BT=y
++BR2_PACKAGE_REALTEK_USB_BT=y
++
+ BR2_PACKAGE_BRCMAP6XXX=y
+ BR2_PACKAGE_BRCMAP6XXX_LOCAL=y
+ BR2_PACKAGE_BRCMAP6XXX_STANDALONE=y
+diff --git a/package/Config.in b/package/Config.in
+old mode 100644
+new mode 100755
+index 441bda5..66f58cc
+--- a/package/Config.in
++++ b/package/Config.in
+@@ -1538,7 +1538,9 @@ menu "Networking applications"
+ 	source "package/bcusdk/Config.in"
+ 	source "package/bind/Config.in"
+ 	source "package/bluez_utils/Config.in"
++	source "package/realtek_bt/Config.in"
+ 	source "package/bluez5_utils/Config.in"
++	source "package/bluez-alsa/Config.in"
+ 	source "package/bmon/Config.in"
+ 	source "package/boa/Config.in"
+ 	source "package/web_ui_wifi/Config.in"
+diff --git a/package/aml_util/aml_util.mk b/package/aml_util/aml_util.mk
+index 00b258f..b8aa755 100755
+--- a/package/aml_util/aml_util.mk
++++ b/package/aml_util/aml_util.mk
+@@ -22,9 +22,9 @@ ifneq ($(filter $(BCM_WIFI_MODULE),$(BCM_MODULES)),)
+ 	BCM := TRUE
+ endif
+ 
+-RTK_MODULES := 8189es 8189ftv 8192cu 8192du 8192eu 8192es 8723au 8723bu 8723bs 8811au 8812au 8822bu 8188eu
++RTK_MODULES := 8189es 8189ftv 8192cu 8192du 8192eu 8192es 8723au 8723bu 8723bs  8723ds 8811au 8812au 8822bu 8188eu
+ 
+-ifneq ($(BR2_PACKAGE_RTK8188EU)$(BR2_PACKAGE_RTK8189ES)$(BR2_PACKAGE_RTK8189FTV)$(BR2_PACKAGE_RTK8192CU)$(BR2_PACKAGE_RTK8192DU)$(BR2_PACKAGE_RTK8192EU)$(BR2_PACKAGE_RTK8192ES)$(BR2_PACKAGE_RTK8723AU)$(BR2_PACKAGE_RTK8723BU)$(BR2_PACKAGE_RTK8723BS)$(BR2_PACKAGE_RTK8822BU)$(BR2_PACKAGE_RTK8811AU)$(BR2_PACKAGE_RTK8812AU),)
++ifneq ($(BR2_PACKAGE_RTK8188EU)$(BR2_PACKAGE_RTK8189ES)$(BR2_PACKAGE_RTK8189FTV)$(BR2_PACKAGE_RTK8192CU)$(BR2_PACKAGE_RTK8192DU)$(BR2_PACKAGE_RTK8192EU)$(BR2_PACKAGE_RTK8192ES)$(BR2_PACKAGE_RTK8723AU)$(BR2_PACKAGE_RTK8723BU)$(BR2_PACKAGE_RTK8723BS)$(BR2_PACKAGE_RTK8723DS)$(BR2_PACKAGE_RTK8822BU)$(BR2_PACKAGE_RTK8811AU)$(BR2_PACKAGE_RTK8812AU),)
+ 	RTK := TRUE
+ endif
+ 
+diff --git a/package/aml_util/src/multi_wifi_load_driver.c b/package/aml_util/src/multi_wifi_load_driver.c
+index de7b9a4..ecc0a27 100644
+--- a/package/aml_util/src/multi_wifi_load_driver.c
++++ b/package/aml_util/src/multi_wifi_load_driver.c
+@@ -216,6 +216,19 @@ static const dongle_info dongle_registerd[] = {
+ 	"rtl8189es",
+ 	0x0
+     },
++	{
++	"d723",
++	"8723ds",
++	"8723ds.ko",
++	REALTEK_KO_PATH,
++	.wifi_module_arg = {
++	    .arg_type   = MODULE_ARG_IFNAME,
++	    .ifname     = "wlan0",
++	    .if2name    = "p2p0",
++	},
++	"rtl8723ds",
++	0x0
++    },
+     {
+ 	"b822",
+ 	"8822bs",
+diff --git a/package/bluez-alsa/Config.in b/package/bluez-alsa/Config.in
+new file mode 100755
+index 0000000..cfd3ec5
+--- /dev/null
++++ b/package/bluez-alsa/Config.in
+@@ -0,0 +1,6 @@
++config BR2_PACKAGE_BLUEZ_ALSA
++	bool "blue-alas"
++	depends on BR2_PACKAGE_BLUEZ5_UTILS
++	select BR2_PACKAGE_SBC
++	help
++		audio plugins for bluez
+diff --git a/package/bluez-alsa/blue-alsa.mk b/package/bluez-alsa/blue-alsa.mk
+new file mode 100755
+index 0000000..68f0034
+--- /dev/null
++++ b/package/bluez-alsa/blue-alsa.mk
+@@ -0,0 +1,39 @@
++################################################################################
++#
++# bluez-alsa
++#
++################################################################################
++
++#BLUEZ_ALSA_VERSION = c3a1c3520b1ec8bb9856492d26a73805dfa6b19c
++#BLUEZ_ALSA_SITE = git://github.com/Arkq/bluez-alsa.git
++BLUEZ_ALSA_VERSION = 1.2.0
++BLUEZ_ALSA_SITE = $(TOPDIR)/../vendor/amlogic/bluez-alsa
++BLUEZ_ALSA_SITE_METHOD = local
++BLUEZ_ALSA_LICENSE = GPLv2+, GPLv2 (py-smbus)
++BLUEZ_ALSA_LICENSE_FILES = COPYING
++BLUEZ_ALSA_INSTALL_STAGING = YES
++BLUEZ_ALSA_AUTORECONF = YES
++
++BLUEZ_ALSA_DEPENDENCIES += bluez5_utils
++BLUEZ_ALSA_DEPENDENCIES += alsa-lib
++BLUEZ_ALSA_DEPENDENCIES += sbc
++BLUEZ_ALSA_INSTALL_STAGING_OPTS = \
++    prefix=$(STAGING_DIR)/usr \
++    exec_prefix=$(STAGING_DIR)/usr \
++    PKG_DEVLIB_DIR=$(STAGING_DIR)/usr/lib \
++    install
++
++BLUEZ_ALSA_INSTALL_TARGET_OPTS = \
++    prefix=$(TARGET_DIR)/usr \
++    exec_prefix=$(TARGET_DIR)/usr \
++    install
++
++define BLUEZ_ALSA_LIB_INSTALL_CMD
++	mkdir -p $(TARGET_DIR)/usr/lib/alsa-lib
++	$(INSTALL) -D -m 0755 $(STAGING_DIR)/usr/lib/alsa-lib/*.so $(TARGET_DIR)/usr/lib/alsa-lib
++
++endef
++BLUEZ_ALSA_CONF_OPTS = --disable-payloadcheck --prefix=$(TARGET_DIR)/usr
++BLUEZ_ALSA_POST_INSTALL_TARGET_HOOKS += BLUEZ_ALSA_LIB_INSTALL_CMD
++
++$(eval $(autotools-package))
+diff --git a/package/bluez5_utils/0001-tools-bneptest.c-Remove-include-linux-if_bridge.h-to.patch b/package/bluez5_utils/0001-tools-bneptest.c-Remove-include-linux-if_bridge.h-to.patch
+deleted file mode 100644
+index e8a3ff4..0000000
+--- a/package/bluez5_utils/0001-tools-bneptest.c-Remove-include-linux-if_bridge.h-to.patch
++++ /dev/null
+@@ -1,45 +0,0 @@
+-From 7c136b4f1941e5bb2a6c8d93985c5734c6aefb29 Mon Sep 17 00:00:00 2001
+-From: Bernd Kuhls <bernd.kuhls@writeme.com>
+-Date: Sun, 22 May 2016 09:48:57 +0200
+-Subject: [PATCH 1/1] tools/bneptest.c: Remove include linux/if_bridge.h to fix
+- musl build
+-
+-Inspired by busybox commit:
+-https://git.busybox.net/busybox/commit/networking/brctl.c?id=5fa6d1a632505789409a2ba6cf8e112529f9db18
+-
+-The build error was found by the autobuilders of the buildroot project:
+-http://autobuild.buildroot.net/results/eba/ebaa0bcb9c325aa6ed0bbd6c7ec75d44befa7645/build-end.log
+-
+-Signed-off-by: Bernd Kuhls <bernd.kuhls@writeme.com>
+-(Patch sent upstream:
+- http://article.gmane.org/gmane.linux.bluez.kernel/67621)
+----
+- tools/bneptest.c | 12 +++++++++++-
+- 1 file changed, 11 insertions(+), 1 deletion(-)
+-
+-diff --git a/tools/bneptest.c b/tools/bneptest.c
+-index 1404252..b832d72 100644
+---- a/tools/bneptest.c
+-+++ b/tools/bneptest.c
+-@@ -36,7 +36,17 @@
+- #include <net/if.h>
+- #include <linux/sockios.h>
+- #include <netinet/in.h>
+--#include <linux/if_bridge.h>
+-+/* #include <linux/if_bridge.h>
+-+ * breaks on musl: we already included netinet/in.h,
+-+ * if we also include <linux/if_bridge.h> here, we get this:
+-+ * In file included from /usr/include/linux/if_bridge.h:18,
+-+ *                  from networking/brctl.c:67:
+-+ * /usr/include/linux/in6.h:32: error: redefinition of 'struct in6_addr'
+-+ * /usr/include/linux/in6.h:49: error: redefinition of 'struct sockaddr_in6'
+-+ * /usr/include/linux/in6.h:59: error: redefinition of 'struct ipv6_mreq'
+-+ */
+-+/* From <linux/if_bridge.h> */
+-+#define BRCTL_SET_BRIDGE_FORWARD_DELAY 8
+- 
+- #include <glib.h>
+- 
+--- 
+-2.8.1
+-
+diff --git a/package/bluez5_utils/Config.in b/package/bluez5_utils/Config.in
+old mode 100644
+new mode 100755
+diff --git a/package/bluez5_utils/bluez5_utils.hash b/package/bluez5_utils/bluez5_utils.hash
+deleted file mode 100644
+index b030f1a..0000000
+--- a/package/bluez5_utils/bluez5_utils.hash
++++ /dev/null
+@@ -1,2 +0,0 @@
+-# From https://www.kernel.org/pub/linux/bluetooth/sha256sums.asc:
+-sha256 16c9c05d2a1da644ce3570d975ada3643d2e60c007a955bac09c0a0efeb58d15  bluez-5.43.tar.xz
+diff --git a/package/bluez5_utils/bluez5_utils.mk b/package/bluez5_utils/bluez5_utils.mk
+old mode 100644
+new mode 100755
+index 66c3eab..b733d07
+--- a/package/bluez5_utils/bluez5_utils.mk
++++ b/package/bluez5_utils/bluez5_utils.mk
+@@ -4,9 +4,11 @@
+ #
+ ################################################################################
+ 
+-BLUEZ5_UTILS_VERSION = 5.43
+-BLUEZ5_UTILS_SOURCE = bluez-$(BLUEZ5_UTILS_VERSION).tar.xz
+-BLUEZ5_UTILS_SITE = $(BR2_KERNEL_MIRROR)/linux/bluetooth
++BLUEZ5_UTILS_VERSION = 5.49
++#BLUEZ5_UTILS_SOURCE = bluez-$(BLUEZ5_UTILS_VERSION).tar.xz
++#BLUEZ5_UTILS_SITE = $(BR2_KERNEL_MIRROR)/linux/bluetooth
++BLUEZ5_UTILS_SITE = $(TOPDIR)/../vendor/amlogic/bluez
++BLUEZ5_UTILS_SITE_METHOD = local
+ BLUEZ5_UTILS_INSTALL_STAGING = YES
+ BLUEZ5_UTILS_DEPENDENCIES = dbus libglib2
+ BLUEZ5_UTILS_LICENSE = GPLv2+, LGPLv2.1+
+@@ -76,6 +78,17 @@ else
+ BLUEZ5_UTILS_CONF_OPTS += --disable-systemd
+ endif
+ 
++define BLUEZ5_UTILS_INSTALL_AML_TOOLS
++	mkdir -p $(TARGET_DIR)/etc/bluetooth
++	$(INSTALL) -D -m 0755 $(@D)/tools/btgatt-server $(TARGET_DIR)/usr/bin
++	$(INSTALL) -D -m 0755 $(@D)/client/default_agent $(TARGET_DIR)/usr/bin
++	$(INSTALL) -D -m 0755 package/bluez5_utils/bluez_tool.sh $(TARGET_DIR)/usr/bin
++	$(INSTALL) -D -m 0755 package/bluez5_utils/wifi_setup_bt.sh $(TARGET_DIR)/usr/bin
++	$(INSTALL) -D -m 0644 package/bluez5_utils/main.conf $(TARGET_DIR)/etc/bluetooth
++endef
++BLUEZ5_UTILS_POST_INSTALL_TARGET_HOOKS += BLUEZ5_UTILS_INSTALL_AML_TOOLS
++BLUEZ5_UTILS_CONF_OPTS += --enable-deprecated
++
+ define BLUEZ5_UTILS_INSTALL_INIT_SYSTEMD
+ 	mkdir -p $(TARGET_DIR)/etc/systemd/system/bluetooth.target.wants
+ 	ln -fs ../../../../usr/lib/systemd/system/bluetooth.service \
+diff --git a/package/bluez5_utils/bluez_tool.sh b/package/bluez5_utils/bluez_tool.sh
+new file mode 100755
+index 0000000..25ca85c
+--- /dev/null
++++ b/package/bluez5_utils/bluez_tool.sh
+@@ -0,0 +1,201 @@
++#!/bin/sh
++
++if [ $2 ];then
++	mode=$2
++else
++	mode="a2dp"
++fi
++
++if [ $3 ];then
++	device=$3
++else
++	device="rtk"
++fi
++
++echo "|--bluez: device = $device mode = $mode--|"
++flag_file="/tmp/bt_running"
++
++set_running_flag()
++{
++	echo "|--bluez: set running flag|"
++	echo 1 > $flag_file
++}
++
++clear_running_flag()
++{
++	echo "|--bluez: clear running flag|"
++	rm -f $flag_file
++}
++
++realtek_bt_init()
++{
++	modprobe rtk_btuart
++	modprobe rtk_btusb
++	usleep 500000
++	rtk_hciattach -n -s 115200 /dev/ttyS1 rtk_h5 &
++}
++
++A2DP_service()
++{
++	echo "|--bluez a2dp-sink/hfp-hf service--|"
++	hciconfig hci0 up
++	usleep 200000
++	/usr/libexec/bluetooth/bluetoothd -n &
++	usleep 200000
++	bluealsa -p a2dp-sink -p hfp-hf &
++	bluealsa-aplay --profile-a2dp 00:00:00:00:00:00 -d dmixer_auto &
++	default_agent &
++	hciconfig hci0 piscan
++	hciconfig hci0 inqparms 18:1024
++	hciconfig hci0 pageparms 18:1024
++
++
++}
++
++BLE_service()
++{
++	echo "|--bluez ble service--|"
++	hciconfig hci0 up
++	hciconfig hci0 noscan
++	usleep 200000
++	btgatt-server &
++}
++
++kill_and_check()
++{
++	p=$1
++	local cnt=20
++	while [ $cnt -gt 0 ]; do
++		n=`ps | grep $p | wc -l`
++		if [ $n -gt 1 ];then
++			killall $p
++			usleep 20000
++			cnt=$((cnt - 1))
++		else
++			break
++		fi
++	done
++
++	if [ $cnt -eq 0 ];then
++		echo "try kill $p fail!!!"
++		exit 0
++	fi
++}
++
++service_down()
++{
++	echo "|--stop bluez service--|"
++	killall default_agent
++	killall bluealsa-aplay
++	killall bluealsa
++	killall bluetoothd
++	killall btgatt-server
++
++	kill_and_check default_agent
++	kill_and_check bluealsa-aplay
++	kill_and_check bluealsa
++	kill_and_check bluetoothd
++	kill_and_check btgatt-server
++
++	hciconfig hci0 down
++
++}
++
++Blue_start()
++{
++	if [ -f $flag_file ];then
++		echo "|--bluez service running!!--|"
++		exit 2
++	fi
++
++	set_running_flag
++	
++	echo 0 > /sys/class/rfkill/rfkill0/state
++	usleep 300000
++	echo 1 > /sys/class/rfkill/rfkill0/state
++
++	echo
++	echo "|-----start bluez----|"
++	if [ $device = "rtk" ];then
++		realtek_bt_init
++	else
++		modprobe hci_uart
++		usleep 300000
++		hciattach -s 115200 /dev/ttyS1 any
++	fi
++	local cnt=50
++	while [ $cnt -gt 0 ]; do
++		hciconfig hci0 2> /dev/null
++		if [ $? -eq 1 ];then
++			echo "checking hci0 ......."
++			usleep 200000
++			cnt=$((cnt - 1))
++		else
++			break
++		fi
++	done
++
++	if [ $cnt -eq 0 ];then
++		echo "hcio shows up fail!!!"
++		clear_running_flag
++		exit 1
++	fi
++
++	if [ $mode = "ble" ];then
++		BLE_service
++	else
++		A2DP_service
++	fi
++
++	echo "|-----bluez is ready----|"
++	echo "==================BT end=============================="
++	date "+%Y-%m-%d %H:%M:%S"
++
++}
++
++Blue_stop()
++{
++	echo -n "Stopping bluez"
++	service_down
++	killall rtk_hciattach
++	killall hciattach
++	rmmod hci_uart
++	rmmod rtk_btusb
++	echo 0 > /sys/class/rfkill/rfkill0/state
++	clear_running_flag
++	echo
++	echo "|-----bluez is shutdown-----|"
++}
++
++case "$1" in
++	start)
++		echo "==================A2DP start=============================="
++		date "+%Y-%m-%d %H:%M:%S"
++		Blue_start &
++		;;
++	restart)
++		echo "==================restart for BLE========================="
++		date "+%Y-%m-%d %H:%M:%S"
++		Blue_stop
++		Blue_start
++		;;
++	up)
++		service_up
++		;;
++	down)
++		service_down
++		;;
++	reset)
++		service_down
++		service_up
++		;;
++	stop)
++		Blue_stop
++		;;
++	*)
++		echo "Usage: $0 {start|stop}"
++		exit 1
++esac
++
++exit $?
++
+diff --git a/package/bluez5_utils/main.conf b/package/bluez5_utils/main.conf
+new file mode 100755
+index 0000000..7785bbc
+--- /dev/null
++++ b/package/bluez5_utils/main.conf
+@@ -0,0 +1,4 @@
++[General]
++Name = MIGU Home M8
++DiscoverableTimeout = 0
++PairableTimeout = 0
+diff --git a/package/bluez5_utils/wifi_setup_bt.sh b/package/bluez5_utils/wifi_setup_bt.sh
+new file mode 100755
+index 0000000..b396565
+--- /dev/null
++++ b/package/bluez5_utils/wifi_setup_bt.sh
+@@ -0,0 +1,168 @@
++#!/bin/sh
++
++PATH=/bin:/sbin:/usr/bin:/usr/sbin
++WIFI_FILE=/data/select.txt
++ssid="CMCC-QLINK"
++password="NONE"
++RTK_WIFI_FLAG="NONE"
++driver_list="8723ds"
++wifi_chip_id=""
++wifi_module_id=""
++wifi_driver_name=""
++MULTI_WIFI=/usr/bin/multi_wifi_load_driver
++RTK_FLAG_FILE=/data/rtk_station_mode
++WIFI_STATUS_FILE=/tmp/wifi_status
++id=0
++
++NAME1=wpa_supplicant
++DAEMON1=/usr/sbin/$NAME1
++PIDFILE1=/var/run/$NAME1.pid
++
++NAME3=dnsmasq
++DAEMON3=/usr/sbin/$NAME3
++PIDFILE3=/var/run/$NAME3.pid
++
++NAME4=dhcpcd
++DAEMON4=/usr/sbin/$NAME4
++PIDFILE4=/var/run/${NAME4}-wlan0.pid
++
++init_wifi_env()
++{
++	killall dnsmasq
++	killall dhcpcd
++}
++
++parse_paras()
++{
++	ssid=`sed -n "1p" $WIFI_FILE`
++	password=`sed -n "2p" $WIFI_FILE`
++	if [ "`echo $password |wc -L`" -lt "8" ];then
++		echo "waring: password lentgh is less than 8, it is not fit for WPA-PSK"
++	fi
++}
++
++reconnect_handler() {
++	while [ $id -ne 0 ]; do
++		wpa_cli remove_network $id
++		id=$((id - 1))
++		ensure_available $id
++		if [ $? -eq 1 ]; then
++			wpa_cli select_network $id
++			wpa_cli enable_network $id
++			check_state 15
++			if [ $? -eq 1 ]; then
++				dhcpcd wlan0
++				#if [ -f $WIFI_STATUS_FILE ]; then
++				echo 2 > $WIFI_STATUS_FILE
++				#fi
++				return 0
++			fi
++		fi
++	done
++	#if [ -f $WIFI_STATUS_FILE ]; then
++	echo 3 > $WIFI_STATUS_FILE
++	#fi
++}
++
++ping_test()
++{
++	killall udhcpc
++	if [ $1 -eq 0 ];then
++          echo "ping fail!! ip is NULL"
++          #if [ -f $WIFI_STATUS_FILE ]; then
++		  echo 3 > $WIFI_STATUS_FILE
++          #fi
++	  return 0
++    fi
++	echo "now going to ping router's ip: $1 for 5 seconds"
++	ping $1 -W 3 -c 2
++	if [ $? -eq 1 ];then
++		echo "ping fail!! please check"
++		reconnect_handler
++	else
++		echo "ping successfully"
++		touch ${RTK_FLAG_FILE}
++		if [ $ssid != "CMCC-QLINK" ]; then
++			#ssid will not be repeat
++			old_id=`wpa_cli list_network | grep -w $ssid | awk 'NR==1 {print $1}'`
++			if [ $old_id -ne $id ]; then
++				wpa_cli remove_network $old_id
++			fi
++			wpa_cli save_config
++			sync
++			#if [ -f  $WIFI_STATUS_FILE ] ;then
++			echo 2 >  $WIFI_STATUS_FILE
++			#fi
++		fi
++		date "+%Y-%m-%d %H:%M:%S"
++		dhcpcd wlan0
++	fi
++}
++
++ensure_available() {
++        crt_ssid=`wpa_cli get_network $1 ssid | sed "1d" | sed 's/\"//g'`
++        wpa_cli scan > /etc/null
++        scan_list=`wpa_cli scan_result | cut -f 5- | sed "1,2d"`
++        arr=$(echo $scan_list|tr "\n" "\n")
++
++        for x in $arr; do
++                if [ "$crt_ssid" = "$x" ]; then
++                        return 1
++                fi
++        done
++        return 0
++}
++
++check_state()
++{
++	local cnt=1
++	while [ $cnt -lt $1 ]; do
++		echo "check_in_loop processing..."
++		ret=`wpa_cli status | grep "wpa_state"`
++		ret=${ret##*=}
++		if [ $ret == "COMPLETED" ]; then
++			return 1
++		else
++			cnt=$((cnt + 1))
++			sleep 1
++			continue
++		fi
++	done
++	return 0
++}
++
++wifi_setup()
++{
++	date "+%Y-%m-%d %H:%M:%S"
++	init_wifi_env
++	parse_paras
++	id=`wpa_cli add_network | grep -v "interface"`
++	echo "***************wifi setup paras***************"
++	echo "**  id=$id                                  **"
++	echo "**  ssid=$ssid                              **"
++	echo "**  password=$password                      **"
++	echo "**********************************************"
++	wpa_cli set_network $id ssid \"$ssid\"
++	if [ "$password" == "NONE" ]; then
++		wpa_cli set_network $id key_mgmt NONE
++	else
++		wpa_cli set_network $id psk \"$password\"
++	fi
++	if [ $ssid == "CMCC-QLINK" ]; then
++		wpa_cli set_network $id scan_ssid 1 
++	fi
++
++	wpa_cli select_network $id
++	wpa_cli enable_network $id
++	check_state 15
++	if [ $? -eq 0 ] ;then
++		echo "connect fail!!"
++		reconnect_handler
++	else
++		echo "start wpa_supplicant successfully!!"
++		ip_addr=`udhcpc -q -n -s /usr/share/udhcpc/default.script -i wlan0 2> /dev/null | grep "adding dns*" | awk '{print $3}'`
++		ping_test $ip_addr $ssid
++	fi
++}
++
++wifi_setup
+diff --git a/package/realtek_bt/Config.in b/package/realtek_bt/Config.in
+old mode 100644
+new mode 100755
+diff --git a/package/realtek_bt/S44bluetooth b/package/realtek_bt/S44bluetooth
+new file mode 100755
+index 0000000..aa999fe
+--- /dev/null
++++ b/package/realtek_bt/S44bluetooth
+@@ -0,0 +1,17 @@
++#!/bin/sh
++
++case "$1" in
++    start)
++		/usr/bin/bluez_tool.sh start rtk &
++        ;;
++    netready|netup|netdown|netchange) ;;
++    stop)
++        /usr/bin/bluez_tool.sh stop
++        ;;
++    *)
++        echo "Usage: $0 {start|stop}"
++        exit 1
++esac
++
++exit $?
++
+diff --git a/package/realtek_bt/realtek_bt.mk b/package/realtek_bt/realtek_bt.mk
+old mode 100644
+new mode 100755
+index ab765b4..47b40ee
+--- a/package/realtek_bt/realtek_bt.mk
++++ b/package/realtek_bt/realtek_bt.mk
+@@ -11,6 +11,8 @@ REALTEK_BT_SITE_METHOD = local
+ REALTEK_BT_MODULE_DIR = kernel/realtek/bt
+ REALTEK_BT_MODULE_INSTALL_DIR = $(TARGET_DIR)/lib/modules/$(LINUX_VERSION_PROBED)/$(REALTEK_BT_MODULE_DIR)
+ 
++REALTEK_BT_SYSTEM_CONFIG_DIR = $(TOPDIR)/package/realtek_bt
++
+ REALTEK_BT_DEPENDENCIES = linux
+ 
+ ifeq ($(BR2_PACKAGE_REALTEK_UART_BT),y)
+@@ -53,7 +55,7 @@ define REALTEK_BT_INSTALL_TARGET_CMDS
+     #install firmware
+ 	mkdir -p $(TARGET_DIR)/lib/firmware/rtlbt
+ 	$(INSTALL) -D -m 0644 $(@D)/fw/* $(TARGET_DIR)/lib/firmware/rtlbt
+-
++	$(INSTALL) -D -m 755 ${REALTEK_BT_SYSTEM_CONFIG_DIR}/S44bluetooth $(TARGET_DIR)/etc/init.d
+ endef
+ 
+ 

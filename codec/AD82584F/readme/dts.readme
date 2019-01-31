@@ -1,0 +1,12 @@
+example for dts:
+	ad82584f_31: ad82584f_31@31 {
+		compatible = "ESMT, ad82584f";
+		#sound-dai-cells = <0>;
+		reg = <0x31>;
+		// No reset_pin on ad82584f(only 24 pins)
+		// GPIOZ_4 low for Power Down mode 
+		// GPOAO_7 high for power on AMP
+		reset_pin = <&gpio_ao GPIOAO_4 GPIO_ACTIVE_HIGH>;
+		power_down_pin = <&gpio_ao GPIOAO_7 GPIO_ACTIVE_HIGH>;
+		status = "okay";
+	};

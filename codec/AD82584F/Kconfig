@@ -1,0 +1,20 @@
+menuconfig AMLOGIC_SND_SOC_CODECS
+	bool "AMLOGIC CODEC drivers"
+	default n
+	help
+	  Say Y or M if you want to add support for codecs attached to
+	  the Amlogic Asoc interface. You will also need
+	  to select the audio interfaces to support below.
+
+#if AMLOGIC_SND_SOC_CODECS
+
+config AMLOGIC_SND_SOC_AD82584F
+		bool "ESMT AD82584F"
+		depends on AMLOGIC_SND_SOC_CODECS
+		depends on I2C
+		default n
+		help
+		Enable Support for ESMT AD82584f CODEC.
+		Select this if your AD82584F is connected via an I2C bus.
+
+#endif #AMLOGIC_SND_SOC_CODECS

@@ -1,0 +1,15 @@
+diff --git a/arch/arm64/boot/dts/amlogic/axg_s420_v03.dts b/arch/arm64/boot/dts/amlogic/axg_s420_v03.dts
+index 3664b3f..73219f1 100644
+--- a/arch/arm64/boot/dts/amlogic/axg_s420_v03.dts
++++ b/arch/arm64/boot/dts/amlogic/axg_s420_v03.dts
+@@ -370,8 +370,8 @@
+ 			frame-master = <&aml_tdma>;
+ 			cpu {
+ 				sound-dai = <&aml_tdma>;
+-				dai-tdm-slot-tx-mask = <1 1>;
+-				dai-tdm-slot-rx-mask = <1 1>;
++				dai-tdm-slot-tx-mask = <1>;
++				dai-tdm-slot-rx-mask = <1>;
+ 				dai-tdm-slot-num = <2>;
+ 				dai-tdm-slot-width = <32>;
+ 				system-clock-frequency = <12288000>;

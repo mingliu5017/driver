@@ -1,0 +1,23 @@
+example for dts:
+    matrix_keypad {
+          compatible = "amlogic, matrix-keypad";
+          status = "okay";
+          scan_period = <40>;
+          row_num = <9>;
+		  column_num = <3>;
+          key_name = "a", "b", "c", "4", "d", "#", "e", "f", "1", "g", "h", "2", "5", "8", "0", "i", "j", "k", "l", "m", "3", "6", "9", "*", "7", "n", "o";
+          key_code = <105 106 107 108 109 110 111 112 113 114 115 116 117 118 119 120 121 122 123 124 125 126 127 128 129 130 131>;
+          row-gpios = <&gpio  GPIOX_16  GPIO_ACTIVE_HIGH
+                      &gpio  GPIOX_17  GPIO_ACTIVE_HIGH
+                      &gpio  GPIOX_18  GPIO_ACTIVE_HIGH
+	              &gpio  GPIOX_19  GPIO_ACTIVE_HIGH
+                      &gpio  GPIOX_12  GPIO_ACTIVE_HIGH
+		      &gpio  GPIOX_13  GPIO_ACTIVE_HIGH
+		      &gpio  GPIOX_14  GPIO_ACTIVE_HIGH
+		      &gpio  GPIOX_15  GPIO_ACTIVE_HIGH
+		      &gpio  GPIOA_19  GPIO_ACTIVE_HIGH>;
+
+          column-gpios = <&gpio_ao  GPIOAO_6  GPIO_ACTIVE_HIGH
+                          &gpio_ao  GPIOAO_8  GPIO_ACTIVE_HIGH
+                          &gpio  GPIOA_18  GPIO_ACTIVE_HIGH>;
+      };

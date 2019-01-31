@@ -1,0 +1,25 @@
+From 7e68c96bcd69b34bf8a9ace01ff05001b04efcff Mon Sep 17 00:00:00 2001
+From: Weiguang Ruan <Weiguang.ruan@amlogic.com>
+Date: Fri, 23 Nov 2018 17:31:01 +0800
+Subject: [PATCH] wifi: add qca9377 wifi support in S42wifi/multiwiifi/web_ui [3/3]
+
+PD#SH-23
+
+Problem:
+wifi fw do not support well
+
+Solution:
+update fw
+
+Verify:
+S400
+
+Change-Id: Iffcbb723cafe86eaea934913fb99833530502bb7
+Signed-off-by: Weiguang Ruan <Weiguang.ruan@amlogic.com>
+---
+
+diff --git a/qcom/config/qca9377/wifi_49/qwlan30.bin b/qcom/config/qca9377/wifi_49/qwlan30.bin
+index 5c8b216..940c673 100644
+--- a/qcom/config/qca9377/wifi_49/qwlan30.bin
++++ b/qcom/config/qca9377/wifi_49/qwlan30.bin
+Binary files differ

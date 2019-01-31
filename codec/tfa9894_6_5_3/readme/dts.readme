@@ -1,0 +1,9 @@
+example for dts:
+    tfa9894_34: tfa9894_34@34 {
+		compatible = "nxp,tfa9894";
+		#sound-dai-cells = <0>;
+		reg = <0x34>;
+		status = "okay";
+        #reset_gpio = <&gpio_ao GPIOAO_3 0>;
+        #irq_gpio = <&gpio_ao GPIOAO_10 0>;
+    };

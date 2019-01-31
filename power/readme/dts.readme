@@ -1,0 +1,6 @@
+example for dts:
+	cw2015:cw2015@62 { 
+		compatible = "cellwise,cw2015";
+		reg = <0x62>;
+		status = "okay";
+	};

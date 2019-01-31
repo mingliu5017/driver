@@ -1,0 +1,20 @@
+menuconfig NXP_SND_SOC_CODECS
+	bool "NXP CODEC drivers"
+	default n
+	help
+	  Say Y or M if you want to add support for codecs attached to
+	  the NXP Asoc interface. You will also need
+	  to select the audio interfaces to support below.
+
+#if NXP_SND_SOC_CODECS
+
+config NXP_SND_CODEC_TFA98XX
+	tristate "NXP Audio tfa 98xx codec"
+	depends on NXP_SND_SOC_CODECS
+	default n
+	help
+		NXP Audio codec,
+		tfa 98xx codec,
+		this codec is internal
+
+#endif #NXP_SND_SOC_CODECS

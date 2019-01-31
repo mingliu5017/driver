@@ -1,0 +1,28 @@
+example for dts:
+	pwmleds {
+		compatible = "pwm-leds";
+		pinctrl-names = "default";
+		pinctrl-0 = <&led_green_pins &led_red_pins &led_blue_pins>;
+		status = "okay";
+		green {
+				label="green";
+				pwms = <&pwm_cd MESON_PWM_1 100000 0>;
+				max-brightness = <255>;
+				linux,default-trigger = "none";
+				brightness = <0>;
+		};
+		red {
+				label="red";
+				pwms = <&pwm_cd MESON_PWM_0 100000 0>;
+				max-brightness = <255>;
+				linux,default-trigger = "none";
+				brightness = <0>;
+		};
+		blue {
+				label="blue";
+				pwms = <&pwm_ab MESON_PWM_1 100000 0>;
+				max-brightness = <255>;
+				linux,default-trigger = "none";
+				brightness = <0>;
+		};
+	};

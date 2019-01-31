@@ -1,0 +1,8 @@
+example for dts:
+	ntp8810:ntp8810@0x2a {
+		compatible = "ntp,ntp8810";
+		#sound-dai-cells = <0>;
+		reg = <0x2a>;    //0x54
+		status = "okay";
+		reset_pin = <&gpio GPIOZ_6 0>;   // gpioz6  10
+	};

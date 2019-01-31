@@ -1,0 +1,20 @@
+menuconfig AMLOGIC_SND_SOC_CODECS
+	bool "AMLOGIC CODEC drivers"
+	default n
+	help
+	  Say Y or M if you want to add support for codecs attached to
+	  the Amlogic Asoc interface. You will also need
+	  to select the audio interfaces to support below.
+
+#if AMLOGIC_SND_SOC_CODECS
+
+config AMLOGIC_SND_SOC_NTP8810
+		bool "NTP8810"
+		depends on AMLOGIC_SND_SOC_CODECS
+		depends on I2C
+		default n
+		help
+		Enable Support for NTP8810 CODEC.
+		Select this if your NTP8810 is connected via an I2C bus.
+
+#endif #AMLOGIC_SND_SOC_CODECS
