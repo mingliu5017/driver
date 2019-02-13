@@ -28,6 +28,7 @@
 #include <linux/suspend.h>
 #include <linux/of_platform.h>
 #include <linux/of_gpio.h>
+#include <linux/ioctl.h>
 
 #include "../../gpio/gpiolib.h"
 
@@ -336,7 +337,8 @@ static struct file_operations kelcd_fops = {
 	.release = kelcd_release,
 	.read = kelcd_read,
 	.write = kelcd_write,
-	.unlocked_ioctl = kelcd_ioctl,
+//	.unlocked_ioctl = kelcd_ioctl,
+	.compat_ioctl = kelcd_ioctl,
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
