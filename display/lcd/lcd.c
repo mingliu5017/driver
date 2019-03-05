@@ -1,12 +1,20 @@
-/******************************
-*: custom driver for kelcd
-*author:sws
-*date:20181228 1022
-*
-*
-*
-*
-******************************/
+/*
+ * kernel/aml-4.9/drivers/amlogic/lcd/lcd.c
+ *
+ * Copyright (C) 2019 Amlogic, Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ */
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
@@ -34,21 +42,7 @@
 
 #include "lcd.h"
 
-#if 1
-#define DBG(x...) printk(x)
-#define DBG_FIND(x...) printk(x)
-#else
-#define DBG(x...)
-#endif
-
-//154液晶 默认181液晶
-#define SUPPORT_154
-//#define SUPPORT_180
-
-/* 液晶最大对比度*/
-#define CONTRAST_MAX 63
-/* 液晶默认对比度*/
-#define CONTRAST_DEFAULT 36
+#define SUPPORT_ST7567
 
 /* 液晶128*64 */
 #define LCD_WIDTH 128
@@ -57,10 +51,9 @@
 #define GPIO_DIRECTION_INPUT 0
 #define GPIO_DIRECTION_OUTPUT 1
 
-/* softkey 高度*/
-#define SOFTKEY_HEIGHT 16
+#define START_COL_OFFSET 0x04
+#define START_ROW_OFFSET 0x10
 
-#define LABEL_kKELCD_KPWR "kaer,gpio_pwr"
 #define LABEL_kKELCD_BL   "lcd-spi-bl"
 #define LABEL_kKELCD_CS   "lcd-spi-cs"
 #define LABEL_kKELCD_A0   "lcd-spi-a0"
@@ -78,37 +71,12 @@ int gpio_lcd_a0 = -1;
 int gpio_lcd_clk = -1;
 int gpio_lcd_data = -1;
 
-/* lcd 初始化指 */
-const unsigned char LCD_INIT_CODE[] =
-{
-		0xac,
-		0x00,
-		0xa2,
-		0xa0,
-		0xc8,
-		0x40,
-		0x25,
-		0x81,
-		0x20,
-		0x2f,
-		0xf8,
-		0x00,
-		0xa6,
-		0xaf
-};
+static int lcd_major = 0;
+static int lcd_minor = 0;
 
-int gpio_pwr = -1;
-static int kelcd_major = 0;
-static int kelcd_minor = 0;
+static struct class *lcd_class = NULL;
+static struct lcd_android_dev *lcd_dev = NULL;
 
-static struct class *kelcd_class = NULL;
-static struct kelcd_android_dev *kelcd_dev = NULL;
-
-static int kelcd_open(struct inode *inode, struct file *filp);
-static int kelcd_release(struct inode *inode, struct file *filp);
-static ssize_t kelcd_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos);
-static ssize_t kelcd_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos);
-static long kelcd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 
 //串行模式的写操作
 void data_send(unsigned char dat)
@@ -135,7 +103,7 @@ void write_cmd(unsigned char cmd)
 void write_data(unsigned char dat)
 {
 	ke_gpio_setpin(gpio_lcd_cs, 0); //低电平，使能
-	ke_gpio_setpin(gpio_lcd_a0, 1);
+	ke_gpio_setpin(gpio_lcd_a0, 1); //高电平，写数据
 	data_send(dat);
 	ke_gpio_setpin(gpio_lcd_cs, 1); //高电
 }
@@ -163,29 +131,6 @@ void lcd_close(void)
 	ke_gpio_setpin(gpio_lcd_cs, 0);
 }
 
-#if 0
-/* 
- * lcd by GPIO simulated  clear 0 routine.
- *
- * @param whichline: GPIO control line
- *
- */
-static void lcd_clr(unsigned char whichline)
-{
-	unsigned char n, m;
-	for (n = 0; n < 9; n++)
-	{
-		write_cmd(0xB0 + n); // Setting Page 0 -- 7
-		write_cmd(0x10);	 // Column Address Ser Upper.
-		write_cmd(0x00);	 //write_cmd(0x04);	// Column Address Ser Lower.  00 is first Column
-		for (m = 0; m < LCD_WIDTH; m++)
-		{
-			write_data(0xff);
-		}
-	}
-}
-#endif
-
 void lcd_clean(void)
 {
 	unsigned char n, m;
@@ -193,7 +138,11 @@ void lcd_clean(void)
 	{
 		write_cmd(0xB0 + n); // Setting Page 0 -- 7
 		write_cmd(0x10);	 // Column Address Ser Upper.
-		write_cmd(0x00);	 //write_cmd(0x04);	// Column Address Ser Lower.  00 is first Column
+#ifdef	SUPPORT_ST7567
+		write_cmd(0x04);	 //write_cmd(0x04);	// Column Address Ser Lower.  00 is first Column
+#else
+		write_cmd(0x00);
+#endif
 		for (m = 0; m < LCD_WIDTH; m++)
 		{
 			write_data(0x0);
@@ -222,31 +171,13 @@ void lcd_set_page(unsigned char page)
 	write_cmd(cmd);
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////
-
-static int kelcd_open(struct inode *inode, struct file *filp)
-{
-	struct kelcd_android_dev *dev;
-	printk("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
-	dev = container_of(inode->i_cdev, struct kelcd_android_dev, dev);
-	filp->private_data = dev;
-
-	printk("open device kelcd is okay!\n");
-	return 0;
-}
-
-static int kelcd_release(struct inode *inode, struct file *filp)
-{
-	printk("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
-	return 0;
-}
-
-static ssize_t kelcd_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
+static ssize_t lcd_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 {
 	ssize_t err = 0;
-	struct kelcd_android_dev *dev = filp->private_data;
+	struct lcd_android_dev *dev = filp->private_data;
 	int val = 0;
-	printk("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
+
+	pr_info("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
 	if (down_interruptible(&(dev->sem)))
 	{
 		return -ERESTARTSYS;
@@ -261,13 +192,13 @@ static ssize_t kelcd_read(struct file *filp, char __user *buf, size_t count, lof
 	return err;
 }
 
-static ssize_t kelcd_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
+static ssize_t lcd_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
 {
-	struct kelcd_android_dev *dev = filp->private_data;
+	struct lcd_android_dev *dev = filp->private_data;
 	ssize_t err = 0;
 	char value = 0;
 
-	printk("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
+	pr_info("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
 	if (down_interruptible(&(dev->sem)))
 	{
 		return -ERESTARTSYS;
@@ -283,197 +214,77 @@ static ssize_t kelcd_write(struct file *filp, const char __user *buf, size_t cou
 	return err;
 }
 
-static long kelcd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+static long lcd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
-
 	int ret = 0;
 	int val = 0;
 	int reg_val = 0;
 
-	printk("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
-	printk("cmd=\n   %ld\n   %ld\n   %ld\n   %ld\n   %ld\n", GPIO_LCD_WRITE_CMD, GPIO_LCD_WRITE_DATA, GPIO_LCD_CLOSE, GPIO_LCD_OPEN, GPIO_LCD_BACKLIGHT);
-	printk("kelcd_ioctl cmd=%d arg=%ld\n", cmd, arg);
+	pr_info("kelcd_ioctl cmd=%d arg=%ld\n", cmd, arg);
 	switch (cmd)
 	{
-	case GPIO_LCD_WRITE_CMD:
-		printk("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
-		val = *(unsigned int *)arg;
-		reg_val = val & 0xff;
-		write_cmd(reg_val);
-		break;
+		case GPIO_LCD_WRITE_CMD:
+			val = *(unsigned int *)arg;
+			reg_val = val & 0xff;
+			write_cmd(reg_val);
+			break;
 
-	case GPIO_LCD_WRITE_DATA:
-		printk("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
-		val = *(unsigned int *)arg;
-		reg_val = val & 0xff;
-		write_data(reg_val);
-		break;
+		case GPIO_LCD_WRITE_DATA:
+			val = *(unsigned int *)arg;
+			reg_val = val & 0xff;
+			write_data(reg_val);
+			break;
 
-	case GPIO_LCD_CLOSE:
-		printk("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
-		break;
+		case GPIO_LCD_CLOSE:
+			pr_info("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
+			break;
 
-	case GPIO_LCD_OPEN:
-		printk("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
-		break;
+		case GPIO_LCD_OPEN:
+			pr_info("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
+			break;
 
-	case GPIO_LCD_BACKLIGHT:
-		printk("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
-		val = *(unsigned int *)arg;
-		reg_val = val & 0xff;
-		back_light(reg_val);
-		break;
+		case GPIO_LCD_BACKLIGHT:
+			pr_info("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
+			val = *(unsigned int *)arg;
+			reg_val = val & 0xff;
+			back_light(reg_val);
+			break;
 
-	default:
-		return -1;
+		default:
+			return -1;
 	}
 
 	return ret;
 }
 
-static struct file_operations kelcd_fops = {
+static int lcd_release(struct inode *inode, struct file *filp)
+{
+	pr_info("%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);
+	return 0;
+}
+
+static int lcd_open(struct inode *inode, struct file *filp)
+{
+	struct lcd_android_dev *dev;
+
+	dev = container_of(inode->i_cdev, struct lcd_android_dev, dev);
+	filp->private_data = dev;
+	pr_info("open lcd device okay!\n");
+	
+	return 0;
+}
+
+static struct file_operations lcd_fops = {
 	.owner = THIS_MODULE,
-	.open = kelcd_open,
-	.release = kelcd_release,
-	.read = kelcd_read,
-	.write = kelcd_write,
+	.open = lcd_open,
+	.release = lcd_release,
+	.read = lcd_read,
+	.write = lcd_write,
 //	.unlocked_ioctl = kelcd_ioctl,
-	.compat_ioctl = kelcd_ioctl,
+	.compat_ioctl = lcd_ioctl,
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
-static int __kelcd_setup_dev(struct kelcd_android_dev *dev)
-{
-	int err;
-	dev_t devno = MKDEV(kelcd_major, kelcd_minor);
-
-	memset(dev, 0, sizeof(struct kelcd_android_dev));
-
-	cdev_init(&(dev->dev), &kelcd_fops);
-	dev->dev.owner = THIS_MODULE;
-	dev->dev.ops = &kelcd_fops;
-
-	err = cdev_add(&(dev->dev), devno, 1);
-	if (err)
-	{
-		return err;
-	}
-
-	sema_init(&(dev->sem), 1);
-
-	return 0;
-}
-
-int kelcd_parse_dt1(struct platform_device *pdev)
-{
-	enum of_gpio_flags flags;
-
-	struct device_node *node;
-
-	int setGpio = -1;
-	int error = -1;
-
-	printk("kelcd_parse_dt1 start\n");
-	node = pdev->dev.of_node;
-
-	gpio_lcd_bl = setGpio = of_get_named_gpio_flags(node, LABEL_kKELCD_BL, 0, &flags);
-	printk("#####sws gpio_lcd_bl: %d --line: %d --func:%s \n file:%s \n", gpio_lcd_bl, __LINE__, __FUNCTION__, __FILE__);
-	if (gpio_is_valid(gpio_lcd_bl))
-	{
-		error = devm_gpio_request(&pdev->dev, gpio_lcd_bl, "kelcd_bl");
-		if (error)
-		{
-			printk("failed to request gpio_lcd_bl  %d: %d\n",
-				   gpio_lcd_bl, error);
-		}
-	}
-	else
-	{
-		printk("kelcd failed gpio gpio_lcd_bl= %d \n", gpio_pwr);
-	}
-
-	gpio_lcd_cs = setGpio = of_get_named_gpio_flags(node, LABEL_kKELCD_CS, 0, &flags);
-	printk("#####sws gpio_lcd_cs: %d --line: %d --func:%s \n file:%s \n", gpio_lcd_cs, __LINE__, __FUNCTION__, __FILE__);
-	if (gpio_is_valid(setGpio))
-	{
-		error = gpio_request(setGpio, "kelcd_cs");
-		if (error < 0)
-		{
-			printk("Failed to request gpio_lcd_cs GPIO %d, error %d\n", setGpio, error);
-		}
-	}
-	else
-	{
-		printk("kelcd failed gpio gpio_lcd_cs= %d \n", gpio_pwr);
-	}
-
-	gpio_lcd_rst = setGpio = of_get_named_gpio_flags(node, LABEL_kKELCD_RST, 0, &flags);
-	printk("#####sws gpio_lcd_rst: %d --line: %d --func:%s \n file:%s \n", gpio_lcd_rst, __LINE__, __FUNCTION__, __FILE__);
-	if (gpio_is_valid(setGpio))
-	{
-		error = gpio_request(setGpio, "kelcd_rst");
-		if (error < 0)
-		{
-			printk("Failed to request gpio_lcd_rst GPIO %d, error %d\n", setGpio, error);
-		}
-	}
-	else
-	{
-		printk("kelcd failed gpio gpio_lcd_rst= %d \n", gpio_pwr);
-	}
-	gpio_lcd_a0 = setGpio = of_get_named_gpio_flags(node, LABEL_kKELCD_A0, 0, &flags);
-	printk("#####sws gpio_lcd_a0: %d --line: %d --func:%s \n file:%s \n", gpio_lcd_a0, __LINE__, __FUNCTION__, __FILE__);
-
-	if (gpio_is_valid(setGpio))
-	{
-		error = gpio_request(setGpio, "kelcd_a0");
-		if (error < 0)
-		{
-			printk("Failed to request gpio_lcd_a0 GPIO %d, error %d\n", setGpio, error);
-		}
-	}
-	else
-	{
-		printk("kelcd failed gpio gpio_lcd_a0= %d \n", gpio_pwr);
-	}
-
-	gpio_lcd_clk = setGpio = of_get_named_gpio_flags(node, LABEL_kKELCD_CLK, 0, &flags);
-	printk("#####sws gpio_lcd_clk: %d --line: %d --func:%s \n file:%s \n", gpio_lcd_clk, __LINE__, __FUNCTION__, __FILE__);
-
-	if (gpio_is_valid(setGpio))
-	{
-		error = gpio_request(setGpio, "kelcd_clk");
-		if (error < 0)
-		{
-			printk("Failed to request gpio_lcd_clk GPIO %d, error %d\n", setGpio, error);
-		}
-	}
-	else
-	{
-		printk("kelcd failed gpio gpio_lcd_clk= %d \n", gpio_pwr);
-	}
-
-	gpio_lcd_data = setGpio = of_get_named_gpio_flags(node, LABEL_kKELCD_DATA, 0, &flags);
-	printk("#####sws gpio_lcd_data: %d --line: %d --func:%s \n file:%s \n", gpio_lcd_data, __LINE__, __FUNCTION__, __FILE__);
-	if (gpio_is_valid(setGpio))
-	{
-		error = gpio_request(setGpio, "kelcd_data");
-		if (error < 0)
-		{
-			printk("Failed to request gpio_lcd_data GPIO %d, error %d\n", setGpio, error);
-		}
-	}
-	else
-	{
-		printk("kelcd failed gpio gpio_lcd_data= %d \n", gpio_pwr);
-	}
-
-	return 0;
-}
-
-#define START_COL_OFFSET 4
-#define START_ROW_OFFSET 0
-
 void hw_lcd_update(void)
 {
 	/* nothing for none-DMA mode driver */
@@ -482,11 +293,16 @@ void hw_lcd_update(void)
 
 	for(line = 0; line < 8; line++)
 	{
-		// set display start line
+#ifdef	SUPPORT_ST7567
+		// set page address
+		lcd_set_page(line);
 		write_cmd(START_ROW_OFFSET);
+#else
+		// set display start line
+		write_cmd(0x0);
 		// set page
 		lcd_set_page(line);
-
+#endif
 		// set start col
 		lcd_set_column(START_COL_OFFSET);
 
@@ -496,6 +312,41 @@ void hw_lcd_update(void)
 			pLcdbuf++;
 		}
 	}
+}
+
+void lcd_init_code(void)
+{
+#ifdef	SUPPORT_ST7567
+	write_cmd(0xe2); // reset signal
+	mdelay(1);
+	write_cmd(0xa2); // 1/9 bias
+	write_cmd(0xa1); // ADC select
+	write_cmd(0xc0); // common output select
+	write_cmd(0x40); // display start line
+	write_cmd(0x2f); // power control(Booster: ON  regulator : ON	follower: ON)
+	mdelay(1);
+	write_cmd(0xf8); // Booster Ratio Select
+	write_cmd(0x00); // 2x,3x,4x
+	write_cmd(0x26); // select resistor ratio Rb/Ra
+	write_cmd(0x81); // select volume
+	write_cmd(0x17); // vop
+	write_cmd(0xaf); //display on
+#else
+	write_cmd(0x00);
+	write_cmd(0xaf);
+	write_cmd(0xe2);
+	write_cmd(0x2c);
+	write_cmd(0x2e);
+	write_cmd(0x2f);
+	write_cmd(0xa0);
+	write_cmd(0xc8);
+	write_cmd(0x40 + 0x20);
+	write_cmd(0xa6);
+	write_cmd(0x25);
+	write_cmd(0x81);
+	write_cmd(0x20);
+	write_cmd(0xaf);
+#endif
 }
 
 void lcd_gpio_init(void)
@@ -519,195 +370,252 @@ void lcd_gpio_init(void)
 	gpio_direction_output(gpio_lcd_bl, GPIO_DIRECTION_OUTPUT);
 }
 
-void lcd_init_code(void)
+static int lcd_parse_dts(struct platform_device *pdev)
 {
-#ifdef SUPPORT_180
-	write_cmd(0x00);
-	//write_cmd(0xaf);
-	//write_cmd(0xe2);
-	write_cmd(0x2c);
-	write_cmd(0x2e);
-	write_cmd(0x2f);
-	write_cmd(0xa0);
-	write_cmd(0xc8);
-	write_cmd(0x60);
-	write_cmd(0xa6);
-	write_cmd(0x25);
-	write_cmd(0x81);
-	write_cmd(0x20);
-	//write_cmd(0xaf);
+	enum of_gpio_flags flags;
+	struct device_node *node;
+	int setGpio = -1;
+	int error = -1;
 
-#elif defined SUPPORT_154
-	write_cmd(0x00);
-	write_cmd(0xaf);
-	write_cmd(0xe2);
-	write_cmd(0x2c);
-	write_cmd(0x2e);
-	write_cmd(0x2f);
-	write_cmd(0xa0);
-	write_cmd(0xc8);
-	write_cmd(0x40 + 0x20);
-	write_cmd(0xa6);
-	write_cmd(0x25);
-	write_cmd(0x81);
-	write_cmd(0x20);
-	write_cmd(0xaf);
-#else
-	write_cmd(0xac);
-	write_cmd(0x00);
-	write_cmd(0xa2);
-	write_cmd(0xa1);
-	write_cmd(0xc8);
-	write_cmd(0x40);
-	write_cmd(0x25);
-	write_cmd(0x81);
-	write_cmd(0x20);
-	write_cmd(0x2f);
-	write_cmd(0xf8);
-	write_cmd(0x00);
-	write_cmd(0xa6);
-#endif
+	node = pdev->dev.of_node;
+
+	setGpio = of_get_named_gpio_flags(node, LABEL_kKELCD_BL, 0, &flags);
+	if (gpio_is_valid(setGpio))
+	{
+		error = devm_gpio_request(&pdev->dev, setGpio, "lcd_bl");
+		if (error)
+		{
+			dev_err(&pdev->dev, "failed to request gpio_lcd_bl  %d: %d\n", setGpio, error);
+		}
+		gpio_lcd_bl = setGpio;
+	}
+	else
+	{
+		dev_err(&pdev->dev, "lcd failed gpio gpio_lcd_bl= %d \n", setGpio);
+	}
+
+	setGpio = of_get_named_gpio_flags(node, LABEL_kKELCD_CS, 0, &flags);
+	if (gpio_is_valid(setGpio))
+	{
+		error = gpio_request(setGpio, "lcd_cs");
+		if (error < 0)
+		{
+			dev_err(&pdev->dev, "Failed to request gpio_lcd_cs GPIO %d, error %d\n", setGpio, error);
+		}
+		gpio_lcd_cs = setGpio;
+	}
+	else
+	{
+		dev_err(&pdev->dev, "lcd failed gpio gpio_lcd_cs= %d \n", setGpio);
+	}
+
+	setGpio = of_get_named_gpio_flags(node, LABEL_kKELCD_RST, 0, &flags);
+	if (gpio_is_valid(setGpio))
+	{
+		error = gpio_request(setGpio, "lcd_rst");
+		if (error < 0)
+		{
+			dev_err(&pdev->dev, "Failed to request gpio_lcd_rst GPIO %d, error %d\n", setGpio, error);
+		}
+		gpio_lcd_rst = setGpio;
+	}
+	else
+	{
+		dev_err(&pdev->dev, "lcd failed gpio gpio_lcd_rst= %d \n", setGpio);
+	}
+	setGpio = of_get_named_gpio_flags(node, LABEL_kKELCD_A0, 0, &flags);
+	if (gpio_is_valid(setGpio))
+	{
+		error = gpio_request(setGpio, "lcd_a0");
+		if (error < 0)
+		{
+			dev_err(&pdev->dev, "Failed to request gpio_lcd_a0 GPIO %d, error %d\n", setGpio, error);
+		}
+		gpio_lcd_a0 = setGpio;
+	}
+	else
+	{
+		dev_err(&pdev->dev, "lcd failed gpio gpio_lcd_a0= %d \n", setGpio);
+	}
+
+	setGpio = of_get_named_gpio_flags(node, LABEL_kKELCD_CLK, 0, &flags);
+	if (gpio_is_valid(setGpio))
+	{
+		error = gpio_request(setGpio, "lcd_clk");
+		if (error < 0)
+		{
+			printk("Failed to request gpio_lcd_clk GPIO %d, error %d\n", setGpio, error);
+		}
+		gpio_lcd_clk = setGpio;
+	}
+	else
+	{
+		printk("lcd failed gpio gpio_lcd_clk= %d \n", setGpio);
+	}
+
+	setGpio = of_get_named_gpio_flags(node, LABEL_kKELCD_DATA, 0, &flags);
+	if (gpio_is_valid(setGpio))
+	{
+		error = gpio_request(setGpio, "lcd_data");
+		if (error < 0)
+		{
+			printk("Failed to request gpio_lcd_data GPIO %d, error %d\n", setGpio, error);
+		}
+		gpio_lcd_data = setGpio;
+	}
+	else
+	{
+		printk("kelcd failed gpio gpio_lcd_data= %d \n", setGpio);
+	}
+
+	return 0;
 }
-static int kelcd_probe(struct platform_device *pdev)
-{
 
+static int lcd_setup_dev(struct lcd_android_dev *dev)
+{
+	int err;
+	dev_t devno = MKDEV(lcd_major, lcd_minor);
+
+	memset(dev, 0, sizeof(struct lcd_android_dev));
+
+	cdev_init(&(dev->dev), &lcd_fops);
+	dev->dev.owner = THIS_MODULE;
+	dev->dev.ops = &lcd_fops;
+
+	err = cdev_add(&(dev->dev), devno, 1);
+	if (err)
+	{
+		return err;
+	}
+
+	sema_init(&(dev->sem), 1);
+
+	return 0;
+}
+
+static int lcd_probe(struct platform_device *pdev)
+{
 	int err = -1;
 
 	struct device *temp = NULL;
 	dev_t dev = 0;
-	printk(KERN_ERR "Initializing kelcd device.\n");
 
 	err = alloc_chrdev_region(&dev, 0, 1, KELCD_DEVICE_NODE_NAME);
 	if (err < 0)
 	{
-		printk(KERN_ALERT "Failed to alloc char kelcd_dev region.\n");
+		dev_err(&pdev->dev,"Failed to alloc char kelcd_dev region.\n");
 		goto fail;
 	}
 
-	kelcd_major = MAJOR(dev);
-	kelcd_minor = MINOR(dev);
+	lcd_major = MAJOR(dev);
+	lcd_minor = MINOR(dev);
 
-	kelcd_dev = kmalloc(sizeof(struct kelcd_android_dev), GFP_KERNEL);
-	if (!kelcd_dev)
+	lcd_dev = kmalloc(sizeof(struct lcd_android_dev), GFP_KERNEL);
+	if (!lcd_dev)
 	{
 		err = -ENOMEM;
-		printk(KERN_ALERT "Failed to alloc kelcd_dev.\n");
+		dev_err(&pdev->dev, "Failed to alloc lcd dev.\n");
 		goto unregister;
 	}
 
-	err = __kelcd_setup_dev(kelcd_dev);
+	err = lcd_setup_dev(lcd_dev);
 	if (err)
 	{
-		printk(KERN_ALERT "Failed to setup kelcd_dev: %d.\n", err);
+		dev_err(&pdev->dev, "Failed to setup dev: %d.\n", err);
 		goto cleanup;
 	}
 
-	kelcd_class = class_create(THIS_MODULE, KELCD_DEVICE_CLASS_NAME);
-	if (IS_ERR(kelcd_class))
+	lcd_class = class_create(THIS_MODULE, KELCD_DEVICE_CLASS_NAME);
+	if (IS_ERR(lcd_class))
 	{
-		err = PTR_ERR(kelcd_class);
-		printk(KERN_ALERT "Failed to create kelcd class.\n");
+		err = PTR_ERR(lcd_class);
+		dev_err(&pdev->dev, "Failed to create lcd class.\n");
 		goto destroy_cdev;
 	}
 
-	temp = device_create(kelcd_class, NULL, dev, "%s", KELCD_DEVICE_FILE_NAME);
+	temp = device_create(lcd_class, NULL, dev, "%s", KELCD_DEVICE_FILE_NAME);
 	if (IS_ERR(temp))
 	{
 		err = PTR_ERR(temp);
-		printk(KERN_ALERT "Failed to create kelcd device.");
+		dev_err(&pdev->dev, "Failed to create lcd device.");
 		goto destroy_class;
 	}
-	dev_set_drvdata(temp, kelcd_dev);
+	dev_set_drvdata(temp, lcd_dev);
 
-	kelcd_parse_dt1(pdev);
-
+	lcd_parse_dts(pdev);
 	lcd_gpio_init();
-	printk(KERN_ERR "Succedded to initialize kelcd device.\n");
 
-	//lcd重置
+	dev_err(&pdev->dev, "lcd reset.\n");
 	ke_gpio_setpin(gpio_lcd_rst, 0);
 	mdelay(1);
 	ke_gpio_setpin(gpio_lcd_rst, 1);
 	mdelay(1);
-	printk(KERN_ERR "lcd rst.\n");
 
+	dev_err(&pdev->dev, "lcd init config.\n");
 	lcd_init_code();
-	printk(KERN_ERR "lcd lcd_init_code.\n");
+	dev_err(&pdev->dev, "lcd clean screen.\n");
 	lcd_clean();
-	printk(KERN_ERR "lcd lcd_clean.\n");
+	dev_err(&pdev->dev, "lcd display welcome.\n");
 	hw_lcd_update();
-	printk(KERN_ERR "lcd hw_lcd_update.\n");
 	back_light(0);
 
 	return 0;
 destroy_class:
-	class_destroy(kelcd_class);
+	class_destroy(lcd_class);
 
 destroy_cdev:
-	cdev_del(&(kelcd_dev->dev));
+	cdev_del(&(lcd_dev->dev));
 
 cleanup:
-	kfree(kelcd_dev);
+	kfree(lcd_dev);
 
 unregister:
-	unregister_chrdev_region(MKDEV(kelcd_major, kelcd_minor), 1);
+	unregister_chrdev_region(MKDEV(lcd_major, lcd_minor), 1);
 
 fail:
 	return err;
 }
 
-static int kelcd_remove(struct platform_device *pdev)
+static int lcd_remove(struct platform_device *pdev)
 {
-	dev_t devno = MKDEV(kelcd_major, kelcd_minor);
+	dev_t devno = MKDEV(lcd_major, lcd_minor);
 
 	printk(KERN_ALERT "Destroy kelcd device.\n");
 	flush_scheduled_work();
 
-	if (kelcd_class)
+	if (lcd_class)
 	{
-		device_destroy(kelcd_class, MKDEV(kelcd_major, kelcd_minor));
-		class_destroy(kelcd_class);
+		device_destroy(lcd_class, MKDEV(lcd_major, lcd_minor));
+		class_destroy(lcd_class);
 	}
 
-	if (kelcd_dev)
+	if (lcd_dev)
 	{
-		cdev_del(&(kelcd_dev->dev));
-		kfree(kelcd_dev);
+		cdev_del(&(lcd_dev->dev));
+		kfree(lcd_dev);
 	}
 
 	unregister_chrdev_region(devno, 1);
 	return 0;
 }
 
-static int kelcd_suspend(struct platform_device *dev, pm_message_t state)
-{
-
-	return 0;
-}
-
-static int kelcd_resume(struct platform_device *dev)
-{
-
-	return 0;
-}
-
-static const struct of_device_id kelcd_dt_match[] = {
-	{	.compatible = "amlogic, lcd-display", },
+static const struct of_device_id lcd_dt_match[] = {
+	{.compatible = "amlogic, lcd-display", },
 	{},
 };
 
-static struct platform_driver kelcd_driver = {
-	.probe = kelcd_probe,
-	.remove = kelcd_remove,
-	.suspend = kelcd_suspend,
-	.resume = kelcd_resume,
+MODULE_DEVICE_TABLE(of, lcd_dt_match);
+
+static struct platform_driver lcd_driver = {
+	.probe = lcd_probe,
+	.remove = lcd_remove,
 	.driver = {
-		.name = "lcd-display",
-		.of_match_table = kelcd_dt_match,
+		.name = "lcd",
+		.of_match_table = lcd_dt_match,
 	},
 };
 
-module_platform_driver(kelcd_driver);
+module_platform_driver(lcd_driver);
 
 MODULE_AUTHOR("Amlogic Liu Ming");
 MODULE_DESCRIPTION("lcd drivers");

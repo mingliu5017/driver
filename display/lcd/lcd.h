@@ -3,7 +3,7 @@
 #define _GPIO_LCD_H
 
 
-#define GPIO_LCD_MAGIC_BASE	'I'
+#define GPIO_LCD_MAGIC_BASE	 'I'
 #define GPIO_LCD_WRITE_CMD   _IOR(GPIO_LCD_MAGIC_BASE,0x01,int)
 #define GPIO_LCD_WRITE_DATA  _IOW(GPIO_LCD_MAGIC_BASE,0x02,int)
 
@@ -23,9 +23,7 @@
 #define KELCD_DEVICE_CLASS_NAME "kelcd"
 
 
-struct kelcd_android_dev {
-	//int val;
-
+struct lcd_android_dev {
 	struct semaphore sem;
 	struct cdev dev;
 
