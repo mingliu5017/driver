@@ -1,0 +1,7 @@
+example for dts:
+    es7243_10: es7243_10@10 {
+        compatible = "MicArray_0";
+        #sound-dai-cells = <0>;
+        reg = <0x10>;
+        status = "okay";
+    };

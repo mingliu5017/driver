@@ -11,7 +11,4 @@ example for dts:
                           &gpio GPIOZ_10 GPIO_ACTIVE_LOW 
                           &gpio GPIOZ_2 GPIO_ACTIVE_LOW 
                           &gpio GPIOZ_3 GPIO_ACTIVE_LOW>;
-               interrupts = <0 70 1
-                             0 71 2>;
-               interrupt-names = "irq_keyup", "irq_keydown";
     };
