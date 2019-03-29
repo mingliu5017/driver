@@ -1,0 +1,21 @@
+From a158fe9c8273001c75023db037aa5a6c1c7ec6db Mon Sep 17 00:00:00 2001
+From: "fei.zhang" <fei.zhang@amlogic.com>
+Date: Tue, 18 Dec 2018 20:53:13 +0800
+Subject: [PATCH] enable pppd for 4G module N720V5
+
+---
+ configs/mesonaxg_s420_32_release_defconfig | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/configs/mesonaxg_s420_32_release_defconfig b/configs/mesonaxg_s420_32_release_defconfig
+index 651998d..c37f8a3 100755
+--- a/configs/mesonaxg_s420_32_release_defconfig
++++ b/configs/mesonaxg_s420_32_release_defconfig
+@@ -619,3 +619,4 @@ BR2_PACKAGE_ALSA_PLUGINS=y
+ #BR2_PACKAGE_PULSEAUDIO=y
+ #BR2_PACKAGE_PULSEAUDIO_DAEMON=y
+ #BR2_TARGET_UBOOT_ENCRYPTION=y
++BR2_PACKAGE_PPPD=y
+-- 
+2.7.4
+

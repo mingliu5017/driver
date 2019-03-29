@@ -1,0 +1,24 @@
+From e20084ee0d8c878eb35f55f62b0991c77a6104a7 Mon Sep 17 00:00:00 2001
+From: "fei.zhang" <fei.zhang@amlogic.com>
+Date: Tue, 18 Dec 2018 20:28:42 +0800
+Subject: [PATCH] N720V5: add PID VID for 4G module N720V5
+
+---
+ drivers/usb/class/cdc-acm.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/usb/class/cdc-acm.c b/drivers/usb/class/cdc-acm.c
+index 08bef18..3fb2616 100644
+--- a/drivers/usb/class/cdc-acm.c
++++ b/drivers/usb/class/cdc-acm.c
+@@ -1904,6 +1904,7 @@ static const struct usb_device_id acm_ids[] = {
+ 	{ USB_DEVICE(0x1519, 0x0452), /* Intel 7260 modem */
+ 	.driver_info = SEND_ZERO_PACKET,
+ 	},
++	{ USB_DEVICE(0x2949, 0x8700)}, //N720V5
+ 
+ 	{ }
+ };
+-- 
+2.7.4
+
