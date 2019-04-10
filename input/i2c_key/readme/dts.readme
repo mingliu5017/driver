@@ -1,0 +1,11 @@
+example for dts:
+    msp430: msp30@1f {
+	    compatible = "ti,msp430";
+	    reg = <0x1f>;
+	    status = "okay";
+        enable = <&gpio GPIOZ_1 GPIO_ACTIVE_HIGH>;
+		scan_period = <100>;
+        key_num = <5>;
+        key_name = "mute","vol-","play","vol+","bt";
+        key_code = <105 106 107 108 109>;
+	};
