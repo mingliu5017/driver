@@ -1,0 +1,7 @@
+example for dts:
+	tas5766m_4e: tas5766m_4e@4e {
+		compatible = "ti,tas5766m";
+		#sound-dai-cells = <0>;
+		reg = <0x4e>;
+		status = "okay";
+	};

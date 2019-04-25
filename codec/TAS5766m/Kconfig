@@ -1,0 +1,22 @@
+menuconfig AMLOGIC_SND_SOC_CODECS
+	bool "AMLOGIC CODEC drivers"
+	default n
+	help
+	  Say Y or M if you want to add support for codecs attached to
+	  the Amlogic Asoc interface. You will also need
+	  to select the audio interfaces to support below.
+
+#if AMLOGIC_SND_SOC_CODECS
+
+#Third part codecs
+# Amlogic add codecs
+config AMLOGIC_SND_SOC_TAS5766M
+	bool "Texas Instruments TAS5766m"
+	depends on AMLOGIC_SND_SOC_CODECS
+	depends on I2C
+	default n
+	help
+		Enable Support for Texas INstruments TAS5766m CODEC.
+		Select this if your TAS5766m is connected via an I2C bus.
+
+#endif #AMLOGIC_SND_SOC_CODECS
