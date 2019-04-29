@@ -154,11 +154,17 @@ static int lp50xx_parse_child_dt(const struct device *dev,
 
 	return 0;
 }
+
+ static const struct lp50xx_chipdef lp5018_cdef = {
+	 .num_leds = 12,
+ };
+
 static const struct lp50xx_chipdef lp5024_cdef = {
 	.num_leds = 24,
 };
  
 static const struct of_device_id of_lp50xx_match[] = {
+	{ .compatible = "ti,lp5018", .data = &lp5018_cdef, },
 	{ .compatible = "ti,lp5024", .data = &lp5024_cdef, },
 	{ }
 };
@@ -273,6 +279,12 @@ static int lp50xx_probe(struct i2c_client *client,
 		dev_err(&client->dev, "no response from chip write: err = %d\n",err);
 		err = -EIO; /* does not answer */
 		goto free_mutex;
+	}
+
+	for(i = 0; i < 24; i++) {
+		err = regmap_write(lp50->regmap, OUT_COLOR(i), 100);
+		if (err < 0)
+			goto free_mutex;
 	}
 
 	for (i = 0; i < lp50->cdef->num_leds; i++) {
