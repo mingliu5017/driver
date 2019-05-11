@@ -101,7 +101,7 @@ example for dts:
 		};
 	};
 	
-	lp5024: lp5024@0x28 {
+	lp5018: lp5018@0x28 {
         compatible = "ti,lp5018";
 		reg = <0x28>;
 		status = "okay";
