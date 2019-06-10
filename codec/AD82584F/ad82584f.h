@@ -15,7 +15,6 @@
 
 struct ad82584f_platform_data {
 	int reset_pin;
-	int power_down_pin;
 };
 
 #endif

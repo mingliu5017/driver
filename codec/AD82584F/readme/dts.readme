@@ -1,12 +1,30 @@
-example for dts:
-	ad82584f_31: ad82584f_31@31 {
-		compatible = "ESMT, ad82584f";
-		#sound-dai-cells = <0>;
-		reg = <0x31>;
-		// No reset_pin on ad82584f(only 24 pins)
-		// GPIOZ_4 low for Power Down mode 
-		// GPOAO_7 high for power on AMP
-		reset_pin = <&gpio_ao GPIOAO_4 GPIO_ACTIVE_HIGH>;
-		power_down_pin = <&gpio_ao GPIOAO_7 GPIO_ACTIVE_HIGH>;
-		status = "okay";
-	};
+example for dts 4 channel:
+codec {
+    prefix-names = "ad82584f_LR", "ad82584f_SUB";
+    sound-dai = <&ad82584f_31 &ad82584f_30>;
+};
+
+&i2c1 {
+    status = "okay";
+    pinctrl-names="default";
+    pinctrl-0=<&b_i2c_master>;
+
+    ad82584f_30: ad82584f_30@30 {
+        compatible = "ESMT, ad82584f";
+        #sound-dai-cells = <0>; 
+        reg = <0x30>;
+        status = "okay";
+        channel_type = "SUB";   /* value: LR, SUB */
+        //reset_pin = <&gpio_ao GPIOAO_4 GPIO_ACTIVE_HIGH>;
+    };   
+    
+    ad82584f_31: ad82584f_31@31 {
+        compatible = "ESMT, ad82584f";
+        #sound-dai-cells = <0>; 
+        reg = <0x31>;
+        status = "okay";
+        channel_type = "LR";   /* value: LR, SUB */
+        reset_pin = <&gpio_ao GPIOAO_4 GPIO_ACTIVE_HIGH>;
+    };   
+};
+
