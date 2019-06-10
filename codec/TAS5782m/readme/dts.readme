@@ -1,0 +1,22 @@
+example for dts 4 channel:
+	/* speaker: LR */
+	tas5782m_2b: tas5782m_2b@2b {
+	   compatible = "ti,tas5782m";
+	   #sound-dai-cells = <0>;
+	   reg = <0x2b>;
+	   codec_name = "tas5782m_LR";
+	   channel_type = "LR";   /* value: LR, LFE */
+	   status = "okay";
+	   reset_pin = <&gpio_ao GPIOAO_4 0>;
+	};
+	
+	/* speaker: LFE */
+	tas5782m_2a: tas5782m_2a@2a {
+	   compatible = "ti,tas5782m";
+	   #sound-dai-cells = <0>;
+	   reg = <0x2a>;
+	   codec_name = "tas5782m_LFE";
+	   channel_type = "LFE";   /* value: LR, LFE */
+	   status = "okay";
+	   //reset_pin = <&gpio_ao GPIOAO_4 0>;
+	};
