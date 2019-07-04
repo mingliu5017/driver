@@ -1,0 +1,108 @@
+	auge_sound {
+		compatible = "amlogic, axg-sound-card";
+		aml-audio-card,name = "AML-AUGESOUND";
+
+		aml-audio-card,dai-link@1 {
+			format = "i2s";
+			mclk-fs = <256>;
+			//continuous-clock;
+			//bitclock-inversion;
+			//frame-inversion;
+			bitclock-master = <&aml_tdmb>;
+			frame-master = <&aml_tdmb>;
+			cpu {
+				sound-dai = <&aml_tdmb>;
+				dai-tdm-slot-tx-mask = <1 1>;
+				dai-tdm-slot-rx-mask = <1 1>;
+				dai-tdm-slot-num = <2>;
+				dai-tdm-slot-width = <32>;
+				system-clock-frequency = <12288000>;
+			};
+			codec {
+		      	prefix-names = "3101_A", "3101_B", "3101_C", "3101_D";
+				sound-dai = <&tlv320adc3101_32 &tlv320adc3101_30 &tlv320adc3101_34 &tlv320adc3101_36>;
+			};
+		};
+	};
+
+&i2c_AO {
+	status = "okay";
+	pinctrl-names="default";
+	pinctrl-0=<&ao_i2c_master_pin2>;
+
+	tlv320adc3101_30: tlv320adc3101_30@30 {
+		compatible = "ti,tlv320adc3101";
+		#sound-dai-cells = <0>;
+		reg = <0x18>;
+		status = "okay";
+	};
+	tlv320adc3101_32: tlv320adc3101_32@32 {
+		compatible = "ti,tlv320adc3101";
+		#sound-dai-cells = <0>;
+		reg = <0x19>;
+		status = "okay";
+	};
+	tlv320adc3101_34: tlv320adc3101_34@30 {
+		compatible = "ti,tlv320adc3101";
+		#sound-dai-cells = <0>;
+		reg = <0x1a>;
+		status = "okay";
+	};
+	tlv320adc3101_36: tlv320adc3101_36@30 {
+		compatible = "ti,tlv320adc3101";
+		#sound-dai-cells = <0>;
+		reg = <0x1b>;
+		status = "okay";
+	};
+};
+
+&audiobus {
+	aml_tdmb: tdmb {
+		compatible = "amlogic, axg-snd-tdmb";
+		#sound-dai-cells = <0>;
+		dai-tdm-lane-slot-mask-in = <1 1 1 1>;
+		dai-tdm-lane-slot-mask-out = <0 0 0 0>;
+		dai-tdm-clk-sel = <1>;
+		clocks = <&clkaudio CLKID_AUDIO_MCLK_B
+				&clkc CLKID_MPLL1>;
+		clock-names = "mclk", "clk_srcpll";
+		pinctrl-names = "tdm_pins";
+		pinctrl-0 = <&tdmb_mclk &tdmout_b &tdmin_b>;
+	};
+}; /* end of audiobus */
+
+&pinctrl_periphs {
+	tdmb_mclk: tdmb_mclk {
+		mux {
+			groups = "mclk_b";
+			function = "mclk_b";
+		};
+	};
+
+	tdmout_b: tdmout_b {
+		mux {
+			groups = "tdmb_sclk",
+				"tdmb_fs";
+			function = "tdmb_out";
+		};
+	};
+
+	tdmin_b_slv: tdmin_b_slv{
+		mux {
+			groups = "tdmb_slv_sclk", "tdmb_slv_fs";
+			function = "tdmb_in";
+		};
+	};
+
+	// tdmin and tdmout are the same pins. can't use at same time
+	tdmin_b:tdmin_b {
+		mux {
+			groups = "tdmb_din0",
+				"tdmb_din1",
+				"tdmb_din2_a12",
+				"tdmb_din3_a13";
+			function = "tdmb_in";
+		};
+	};
+
+}; /* end of pinctrl_periphs */
