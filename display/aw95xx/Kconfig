@@ -1,0 +1,8 @@
+#
+# LEDRING drivers configuration
+#
+config AMLOGIC_AW9523B
+	bool "System AW9523B Support"
+	default n
+	help
+	  This option enables support for system AW9523B drivers.

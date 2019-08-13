@@ -1,0 +1,11 @@
+example for dts:
+    aw9523: aw9523@59 {
+		compatible = "awinic,aw9523";
+		reg = <0x59>;
+	    status = "okay";
+		enable = <&gpio_ao GPIOAO_13 GPIO_ACTIVE_HIGH>;
+		scan_period = <50>;
+		key_num = <7>; 
+		key_name = "vol-","play","vol+","bass+","bass-","treble-","treble+";
+		key_code = <114 139 115 116 117 118 119>;
+   };
