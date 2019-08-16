@@ -1,0 +1,17 @@
+example for dts 4 channel:
+&i2c1 {
+    status = "okay";
+    pinctrl-names="default";
+    pinctrl-0=<&b_i2c_master>;
+
+    ad85050:ad85050@30 {
+		compatible = "ESMT, ad85050";
+		#sound-dai-cells = <0>;
+        ad85050_amp  = <&gpio GPIOZ_5 GPIO_ACTIVE_HIGH>;
+        ad85050_power  = <&gpio GPIOZ_2 GPIO_ACTIVE_HIGH>;
+        ad85050_3v3  = <&gpio GPIOZ_7 GPIO_ACTIVE_HIGH>;
+		reg = <0x30>;
+		status = "okay";
+    };
+};
+
