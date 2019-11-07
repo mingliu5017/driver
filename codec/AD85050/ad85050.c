@@ -37,6 +37,7 @@ static int g_mute_pin = 0;
 struct gpio_desc *desc;
 
 //#define	AD85050_REG_RAM_CHECK
+#define	AD85050_REG_EQ_DRC
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -229,6 +230,7 @@ static int m_reg_tab[AD85050_REGISTER_COUNT][2] = {
     {0x9a, 0x00},//##Bottom_8-bits_of_RAM4_Data
     {0x9b, 0x00},//##RAM4_test_r/w_control
 };
+#ifdef	AD85050_REG_EQ_DRC
 
 static int m_ram1_tab[][4] = {
     {0x00, 0x00, 0x00, 0x00},//##Channel_1_EQ1_A1
@@ -596,7 +598,7 @@ static int m_ram2_tab[][4] = {
     {0xb2, 0x00, 0x40, 0x00},//##Reserve
     {0xb3, 0x00, 0x10, 0x00},//##Reserve
 };
-
+#endif
 /* codec private data */
 struct ad85050_priv {
     struct regmap *regmap;
@@ -760,6 +762,7 @@ static struct snd_soc_dai_driver ad85050_dai = {
     },
     .ops = &ad85050_dai_ops,
 };
+#ifdef	AD85050_REG_EQ_DRC
 
 static int ad85050_set_eq_drc(struct snd_soc_codec *codec)
 {
@@ -782,6 +785,7 @@ static int ad85050_set_eq_drc(struct snd_soc_codec *codec)
     }
     return 0;
 }
+#endif
 static int ad85050_reg_init(struct snd_soc_codec *codec)
 {
     int i = 0;
@@ -857,13 +861,17 @@ static int ad85050_init(struct snd_soc_codec *codec)
 
     snd_soc_write(codec, 0x02, 0x7f);//--mute amp
     udelay(100);
+
+#ifdef	AD85050_REG_EQ_DRC
+
     // write amp ram (eq and drc ... ) 
     ad85050_set_eq_drc(codec);
     udelay(100);
 
     printk("%s\n", __func__);
-
+#endif
 #ifdef	AD85050_REG_RAM_CHECK
+
     // Please note that the register from 0x1d to 0x2d and from 0x44 to 0x5b, the value what you read(as below)may be different from what you wrote.
     ad85050_reg_check(codec);
     // Please note that ram1 from 0x64 to 0x67,the value what you read(as below)may be different from what you wrote.
@@ -1106,26 +1114,6 @@ static int ad85050_i2c_probe(struct i2c_client *i2c,
     gpio_request(pin, "ad85050_amp");
     gpio_direction_output(pin, 1);
     printk("g_mute_pin = %d\n", g_mute_pin);
-
-    desc = of_get_named_gpiod_flags(i2c->dev.of_node, "ad85050_power", 0, NULL);
-    pin = desc_to_gpio(desc);
-    if (!gpio_is_valid(pin)) {
-        pr_err("ad85050 gpio %d is not valid\n", pin);
-        return -EINVAL;
-    }
-    gpio_request(pin, "ad85050_power");
-    gpio_direction_output(pin, 1);
-    printk("ad85050_power = %d\n", pin);
-
-	desc = of_get_named_gpiod_flags(i2c->dev.of_node, "ad85050_3v3", 0, NULL);
-	pin = desc_to_gpio(desc);
-	if (!gpio_is_valid(pin)) {
-		pr_err("ad85050 gpio %d is not valid\n", pin);
-		return -EINVAL;
-	}
-	gpio_request(pin, "ad85050_3v3");
-	gpio_direction_output(pin, 1);
-	printk("ad85050_3v3 = %d\n", pin);
 
     i2c_set_clientdata(i2c, ad85050);
 
