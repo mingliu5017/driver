@@ -58,17 +58,21 @@ static void ad85050_late_resume(struct early_suspend *h);
         SNDRV_PCM_FMTBIT_S24_LE | \
         SNDRV_PCM_FMTBIT_S32_LE)
 
+/* codec private data */
+struct ad85050_priv {
+    struct regmap *regmap;
+    struct snd_soc_codec *codec;
+    struct ad85050_platform_data *pdata;
+#ifdef CONFIG_HAS_EARLYSUSPEND
+    struct early_suspend early_suspend;
+#endif
+
+    struct i2c_client *control_data;
+    int mute_state;
+};
+
 static const DECLARE_TLV_DB_SCALE(mvol_tlv, -10300, 50, 1);
 static const DECLARE_TLV_DB_SCALE(chvol_tlv, -10300, 50, 1);
-
-static const struct snd_kcontrol_new ad85050_snd_controls[] = {
-    SOC_SINGLE_TLV("ad850 Volume", MVOL, 0,
-            0xff, 1, mvol_tlv),
-    SOC_SINGLE_TLV("Ch1 Volume", C1VOL, 0,
-            0xff, 1, chvol_tlv),
-    SOC_SINGLE_TLV("Ch2 Volume", C2VOL, 0,
-            0xff, 1, chvol_tlv),
-};
 
 static struct snd_soc_codec *ad85050_codec;
 
@@ -85,6 +89,7 @@ static int m_reg_tab[AD85050_REGISTER_COUNT][2] = {
     {0x09, 0x18},//##Channel_6_volume_control
     {0x0a, 0x10},//##Bass_Tone_Boost_and_Cut
     {0x0b, 0x10},//##Treble_Tone_Boost_and_Cut
+    //{0x0c, 0xd0},//##State_Control_4  ART
     {0x0c, 0x90},//##State_Control_4
     {0x0d, 0x0c},//##Channel_1_configuration_registers
     {0x0e, 0x0c},//##Channel_2_configuration_registers
@@ -599,17 +604,58 @@ static int m_ram2_tab[][4] = {
     {0xb3, 0x00, 0x10, 0x00},//##Reserve
 };
 #endif
-/* codec private data */
-struct ad85050_priv {
-    struct regmap *regmap;
-    struct snd_soc_codec *codec;
-    struct ad85050_platform_data *pdata;
-#ifdef CONFIG_HAS_EARLYSUSPEND
-    struct early_suspend early_suspend;
-#endif
 
-    struct i2c_client *control_data;
+static int ad85050_get_mute(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct ad85050_priv *ad85050 = snd_soc_codec_get_drvdata(codec);
+
+	ucontrol->value.integer.value[0] = ad85050->mute_state;
+
+	return 0;
+}
+
+/*
+ * GVA : boot up initialization sequence
+ * so we can set /PD high in called by prepare
+*/
+static int ad85050_set_mute(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct ad85050_priv *ad85050 = snd_soc_codec_get_drvdata(codec);
+
+	ad85050->mute_state = ucontrol->value.integer.value[0];
+
+	pr_info(">>>>>>>>%s  %d\n", __func__, ad85050->mute_state);
+
+	if (ad85050->mute_state){
+		gpio_direction_output(g_mute_pin, 1); 	// pull high AMP_SDB pin
+		snd_soc_write(codec, 0x02, 0x00);	//--unmute amp
+	}else{
+		snd_soc_write(codec, 0x02, 0x7f);//--mute amp
+		gpio_direction_output(g_mute_pin, 0);	// pull high AMP_SDB pin
+	}
+
+	return 0;
+}
+
+static const struct snd_kcontrol_new ad85050_snd_controls[] = {
+    SOC_SINGLE_TLV("ad850 Volume", MVOL, 0,
+            0xff, 1, mvol_tlv),
+    SOC_SINGLE_TLV("Ch1 Volume", C1VOL, 0,
+            0xff, 1, chvol_tlv),
+    SOC_SINGLE_TLV("Ch2 Volume", C2VOL, 0,
+            0xff, 1, chvol_tlv),
+    SOC_SINGLE("Bass Volume", VBASS, 0,
+            0x1f, 1),
+    SOC_SINGLE("Treble Volume", VTREBLE, 0,
+            0x1f, 1),
+    SOC_SINGLE_BOOL_EXT("SPK unmute", 0,
+		   ad85050_get_mute, ad85050_set_mute),
 };
+
 
 static int ad85050_set_dai_sysclk(struct snd_soc_dai *codec_dai,
         int clk_id, unsigned int freq, int dir)
@@ -833,6 +879,7 @@ static int ad85050_init(struct snd_soc_codec *codec)
 {
 
     int ret;
+	int write_ret,read_ret;
 
     printk("%s\n", __func__);
 
@@ -846,8 +893,18 @@ static int ad85050_init(struct snd_soc_codec *codec)
     printk("%s---------------%d\n", __func__,__LINE__);
 
     // software reset amp 
-    snd_soc_write(codec, 0x1a, 0x50);//--reset amp
-    mdelay(1);
+    write_ret = snd_soc_write(codec, 0x1a, 0x50);//--reset amp
+    if(-EIO == write_ret){
+		mdelay(1);
+        write_ret = snd_soc_write(codec, 0x1a, 0x50);//--reset amp
+        mdelay(1);
+    }
+    read_ret = snd_soc_read(codec, 0x50);
+	if((-EIO == write_ret) && (-EIO ==read_ret)){
+		 printk("read and rest ad8050 fail.\n");
+		return -EIO;
+	}
+		
     snd_soc_write(codec, 0x1a, 0x70);//--Normal operation
     mdelay(20);
 

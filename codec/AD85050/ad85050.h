@@ -5,6 +5,9 @@
 #define C1VOL                            0x04
 #define C2VOL                            0x05
 
+#define VBASS                            0x0a
+#define VTREBLE							 0x0b
+
 #define CFADDR                           0x1d
 #define A1CF1                            0x1e
 #define A1CF2                            0x1f
