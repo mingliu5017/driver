@@ -26,3 +26,25 @@ example for dts:
 				brightness = <0>;
 		};
 	};
+	
+	mesonaxg.dtsi
+    led_green_pins:led_green_pins {
+        mux {
+            groups ="pwm_ao_c_ao8";
+            function = "pwm_ao_c";
+        };
+    };
+
+    led_red_pins:led_red_pins {
+        mux {
+            groups ="pwm_ao_a";
+            function = "pwm_ao_a";
+        };
+    };
+
+    led_blue_pins:led_blue_pins {
+        mux {
+            groups ="pwm_ao_d";
+            function = "pwm_ao_d";
+        };
+    };
