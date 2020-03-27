@@ -1,0 +1,10 @@
+example for dts:
+	rotary_key{
+		compatible = "amlogic, rotary-keypad";
+		status = "okay";
+		jetter_time = <1>;
+		key_name = "vol_down", "vol_up";
+		key_code = <114 115>;
+		vol_up-gpios = <&gpio  GPIOA_18 GPIO_ACTIVE_HIGH>;
+		vol_down-gpios = <&gpio  GPIOA_17 GPIO_ACTIVE_HIGH>;
+	};
