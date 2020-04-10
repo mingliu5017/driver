@@ -35,6 +35,13 @@
 
 #define lp50xx_MAX_LEDS         24
 
+#define LED_MAGIC_BASE	 'I'
+#define LED_COLSE_TIME_CMD   _IOR(LED_MAGIC_BASE,0x01,int)
+#define LED_OPEN_TIME_CMD   _IOR(LED_MAGIC_BASE,0x02,int)
+
+#define DEVICE_NAME       "lp50xx"
+#define CHAR_DEV_NAME     "aml_lp50xx"
+
 struct lp50xx_chipdef {
 	int num_leds;
 };
@@ -49,6 +56,11 @@ struct lp50xx_chip {
 	struct i2c_client               *client;
 	struct regmap                   *regmap;
 	struct mutex                    lock;
+	struct class *cls;
+	int major;
+	struct timer_list polling_timer;//定时器
+	struct work_struct work_list;//定义工作队列
+	int time_period;//时间间隔
 
 	struct lp50xx_led {
 		struct lp50xx_chip  *chip;
@@ -110,6 +122,29 @@ static struct regmap_config lp50xx_regmap_config = {
 	.num_reg_defaults = ARRAY_SIZE(lp50xx_reg_defaults),
 };
 
+struct lp50xx_chip *lp50;
+
+#define LED_NUMBER   4
+#define DEFAULT_SPEED    1000
+
+static struct _style {
+	int num; 		/*the number of led*/
+	int times;		/*1: stop after action once, 0: cycle action*/
+	int state_index;
+	int style[6][LED_NUMBER];	/*style data*/
+} styleData = {
+	LED_NUMBER, 2, 0,
+	{
+		     /*led1    led2      led3     led4   */
+	        {0xA0A0A0, 0x060606, 0x060606, 0x060606}, /*state1*/
+	        {0x060606, 0xA0A0A0, 0x060606, 0x060606}, /*state2*/
+	        {0x060606, 0x060606, 0xA0A0A0, 0x060606}, /*state3*/
+	        {0x060606, 0x060606, 0x060606, 0xA0A0A0}, /*state4*/
+	        {0x060606, 0x060606, 0xA0A0A0, 0x060606}, /*state5*/
+	        {0x060606, 0xA0A0A0, 0x060606, 0x060606}, /*state6*/
+	},
+};
+
 static int lp50xx_brightness_set(struct led_classdev *cdev,
 				     enum led_brightness brightness)
 {
@@ -118,7 +153,7 @@ static int lp50xx_brightness_set(struct led_classdev *cdev,
 	struct lp50xx_chip *lp50 = led->chip;
 	int ret;
 
-	dev_dbg(&lp50->client->dev, "%s %d: %d \r\n", __func__, led->channels, brightness);
+	//dev_err(&lp50->client->dev, "%s %d: %d \r\n", __func__, led->channels, brightness);
 
 	mutex_lock(&lp50->lock);
 
@@ -240,10 +275,129 @@ put_child_node:
 	return ret;
 }
 
+static void leds_display(void)
+{
+	int i, j, ret;
+    int reg, bright;
+
+	switch (styleData.times) {
+		case 2:
+			for (i=1; i < 3; i++) {
+			    /*RGB display*/
+				for (j=0; j< 3; j++) {
+					reg = i*3+j+1;
+					ret = regmap_write(lp50->regmap, OUT_COLOR(reg), 0xA0);
+					if (ret)
+						pr_err("try update led data reg: %d fail\n", i+1);
+				}
+			}
+			styleData.times --;
+			break;
+		case 1:
+			for (i=0; i < 4; i++) {
+			    /*RGB display*/
+				for (j=0; j< 3; j++) {
+					reg = i*3+j+1;
+					ret = regmap_write(lp50->regmap, OUT_COLOR(reg), 0xA0);
+					if (ret)
+						pr_err("try update led data reg: %d fail\n", i+1);
+				}
+			}
+			styleData.times --;
+			lp50->time_period = 200;
+			break;
+		case 0:
+			//pr_err("display led state:%d \n",styleData.state_index);
+			for (i=0; i < styleData.num; i++) {
+			    /*RGB display*/
+				for (j=0; j< 3; j++) {
+					bright = (styleData.style[styleData.state_index][i] >> (j*8)) & 0xFF;
+					reg = i*3+j+1;
+					ret = regmap_write(lp50->regmap, OUT_COLOR(reg), bright);
+					if (ret)
+						pr_err("try update led data reg: %d fail\n", i+1);
+				}
+			}
+
+			styleData.state_index ++;
+
+			if(styleData.state_index > 5)
+				styleData.state_index = 0;
+			break;
+		default:
+			 break;
+	}
+
+}
+
+
+static void list_work_func(struct work_struct *work)
+{
+	leds_display();
+
+}
+
+static void polling_timer_handler(unsigned long data)
+{
+	struct lp50xx_chip *lp50 = (struct lp50xx_chip *)data;
+
+	schedule_work(&lp50->work_list);
+	mod_timer(&(lp50->polling_timer), \
+		jiffies+msecs_to_jiffies(lp50->time_period));
+}
+
+static void time_set(struct lp50xx_chip *lp50)
+{
+   INIT_WORK(&lp50->work_list, list_work_func);
+
+   setup_timer(&lp50->polling_timer, \
+	   polling_timer_handler, (unsigned long)lp50);
+
+   mod_timer(&lp50->polling_timer, \
+	   jiffies+msecs_to_jiffies(lp50->time_period));
+}
+
+static int lp50xx_open(struct inode *inode, struct file *filp)
+{
+	pr_info("open lp50xx led device.\n");
+	
+	return 0;
+}
+
+static long lp50xx_ioctl(struct file *file, unsigned int cmd, unsigned long args)
+{
+	int i = 0;
+
+	switch (cmd) {
+	   case LED_COLSE_TIME_CMD:
+		    del_timer(&lp50->polling_timer);
+			for(i = 1; i < 13; i++) {
+			    regmap_write(lp50->regmap, OUT_COLOR(i), 0x00);
+			}
+			pr_info("stop boot up led display!\n");
+	        break;
+
+	   case LED_OPEN_TIME_CMD:
+	   	    time_set(lp50);
+			pr_info("start boot up led display!\n");
+	        break;
+	   default:
+	       break;
+	}
+
+	   return 0;
+}
+
+static const struct file_operations lp50_fops = {
+	.owner = THIS_MODULE,
+	.open = lp50xx_open,
+	//.unlocked_ioctl = lp50xx_ioctl,
+	.compat_ioctl = lp50xx_ioctl
+};
+
 static int lp50xx_probe(struct i2c_client *client,
 			    const struct i2c_device_id *id)
 {
-	struct lp50xx_chip *lp50;
 	int err;
 	int i = 0;
 
@@ -274,15 +428,33 @@ static int lp50xx_probe(struct i2c_client *client,
 		goto free_mutex;
 	}
 
-	err = regmap_write(lp50->regmap, DEVICE_CONFIG1, 0x3e);
+	err = regmap_write(lp50->regmap, DEVICE_CONFIG1, 0x1c);
 	if (err < 0) {
 		dev_err(&client->dev, "no response from chip write: err = %d\n",err);
 		err = -EIO; /* does not answer */
 		goto free_mutex;
 	}
+#if 0
+	//led4 rgb
+	err = regmap_write(lp50->regmap, OUT_COLOR(12), 45);
+	err = regmap_write(lp50->regmap, OUT_COLOR(11), 60);
+	err = regmap_write(lp50->regmap, OUT_COLOR(10), 160);
+	//led3 rgb
+	err = regmap_write(lp50->regmap, OUT_COLOR(9), 235);
+	err = regmap_write(lp50->regmap, OUT_COLOR(8), 15);
+	//led2 rgb
+	err = regmap_write(lp50->regmap, OUT_COLOR(6), 140);
+	err = regmap_write(lp50->regmap, OUT_COLOR(5), 85);
+	//led1 rgb
+	err = regmap_write(lp50->regmap, OUT_COLOR(3), 65);
+	err = regmap_write(lp50->regmap, OUT_COLOR(2), 235);
+	err = regmap_write(lp50->regmap, OUT_COLOR(1), 15);
+	if (err < 0)
+		goto free_mutex;
 
+#endif
 	for(i = 0; i < 24; i++) {
-		err = regmap_write(lp50->regmap, OUT_COLOR(i), 100);
+		err = regmap_write(lp50->regmap, OUT_COLOR(i), 0);
 		if (err < 0)
 			goto free_mutex;
 	}
@@ -301,6 +473,12 @@ static int lp50xx_probe(struct i2c_client *client,
 			goto free_mutex;
 	}
 
+	lp50->major = register_chrdev(0, CHAR_DEV_NAME, &lp50_fops);
+	lp50->cls = class_create(THIS_MODULE, DEVICE_NAME);
+	device_create(lp50->cls, NULL, MKDEV(lp50->major, 0), NULL, DEVICE_NAME);
+	lp50->time_period = DEFAULT_SPEED;
+	time_set(lp50);
+
 	return 0;
 
 free_mutex:
@@ -312,7 +490,15 @@ static int lp50xx_remove(struct i2c_client *client)
 {
 	struct lp50xx_chip *lp50 = i2c_get_clientdata(client);
 
+	device_destroy(lp50->cls, MKDEV(lp50->major, 0));
+	class_destroy(lp50->cls);
+	unregister_chrdev(lp50->major, CHAR_DEV_NAME);
+
 	mutex_destroy(&lp50->lock);
+	flush_work(&lp50->work_list);
+	del_timer(&lp50->polling_timer);
+	devm_kfree(&client->dev, lp50);
+
 	return 0;
 }
 
