@@ -4,3 +4,6 @@ example for dts:
 		reg = <0x62>;
 		status = "okay";
 	};
+
+driver point:
+/sys/class/power_supply/cw-bat/capacity

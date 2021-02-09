@@ -1,0 +1,9 @@
+example for dts :
+	tas5805: tas5805@2c {
+		compatible = "TI, tas5805";
+		#sound-dai-cells = <0>;
+		reg = <0x2c>;
+		status = "okay";
+		volume = <3>;
+		pdn_pin = <&gpio GPIOZ_6 GPIO_ACTIVE_LOW>;
+ 	};

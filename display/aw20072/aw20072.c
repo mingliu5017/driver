@@ -22,7 +22,7 @@
 #include <linux/amlogic/i2c-amlogic.h>
 
 #define DEVICE_NAME "AW20072"
-#define DRV_VERSION  "2.1"
+#define DRV_VERSION  "2.2"
 
 
 struct leds_aw20072_platform_data {
@@ -47,8 +47,6 @@ struct leds_aw20072_platform_data {
 
 static struct leds_aw20072_platform_data *pdata = NULL;
 
-//static unsigned int aw_led_arry[LEDS_MAX] = {0x1e,0x12,0x6,0x3c,0x30,0x24,0x18,0xc,0x0,0x3f,0x33,0x27,0x1b,0xf,0x3,0x42,0x36,0x2a,0x9,0x15,0x21,0x2d,0x39,0x45};
-//static unsigned int aw_led_arry[LEDS_MAX] = {0x1e,0x12,0x6,0x3f,0x33,0x27,0x1b,0xf,0x3,0x3c,0x30,0x24,0x0,0xc,0x18,0x45,0x39,0x2d,0x42,0x15,0x9,0x21,0x36,0x2a};
 static unsigned int aw_led_arry[LEDS_MAX] = {0x39,0x45,0x18,0xc,0x0,0x24,0x30,0x3c,0x3,0xf,0x1b,0x27,0x33,0x3f,0x6,0x12,0x1e,0x2a,0x36,0x21,0x9,0x15,0x42,0x2d};
 
 #define AW20072_IMAX_NAME_MAX       32
@@ -81,20 +79,7 @@ static char aw20072_imax_name[][AW20072_IMAX_NAME_MAX] = {
 static int aw20072_i2c_write(struct i2c_client *i2client, 
          unsigned char reg_addr, unsigned char reg_data)
 {
-	int ret = -1;
-	unsigned char cnt = 0;
-	while(cnt < AW_I2C_RETRIES) {
-		ret = i2c_smbus_write_byte_data(i2client, reg_addr, reg_data);
-		if(ret < 0) {
-			dev_err(&i2client->dev, "[AW20072] %s: i2c_write cnt=%d error=%d\n", __func__, cnt, ret);
-		} else {
-			break;
-		}
-		cnt ++;
-		msleep(AW_I2C_RETRY_DELAY);
-    }
-
-    return ret;
+    return i2c_smbus_write_byte_data(i2client, reg_addr, reg_data);
 }
 
 static int aw20072_i2c_read(struct i2c_client *i2client, 
@@ -129,6 +114,9 @@ static void write_led(u8 position, u32 data, struct leds_aw20072_platform_data *
 	dbuf[0] = (data >> 16) & 0xff;dbuf[0]=dbuf[0]>>2;
 	dbuf[1] = (data >>  8) & 0xff;dbuf[1]=dbuf[1]>>2;
 	dbuf[2] = (data >>  0) & 0xff;dbuf[2]=dbuf[2]>>2;
+	dbuf[1] = (dbuf[1]*((dbuf[1]<<2)+ 270))/1000;
+	dbuf[2] = (dbuf[2] * 38)/100;
+	dbuf[0] = (dbuf[0] * 86)/100;
 
 	aw20072_i2c_write(pdata->client, 0xF0, 0xC1);
 	aw20072_i2c_write(pdata->client, aw_led_arry[position] + 0, dbuf[0]);
@@ -136,6 +124,7 @@ static void write_led(u8 position, u32 data, struct leds_aw20072_platform_data *
 	aw20072_i2c_write(pdata->client, aw_led_arry[position] + 2, dbuf[2]);
 }
 
+#if 0
 static u8 next_led(u8 position)
 {
 	if (position >= LEDS_MAX - 1) {
@@ -143,12 +132,14 @@ static u8 next_led(u8 position)
 	}
 	return ++position;
 }
+#endif
 
 static void work_update_func(struct work_struct *work)
-{
-	struct leds_aw20072_platform_data *pdata = container_of(work, struct leds_aw20072_platform_data, work_update);
+{	
 	static u8 color_step = 0;
-
+	u8 led_num = 0;
+	struct leds_aw20072_platform_data *pdata = container_of(work, struct leds_aw20072_platform_data, work_update);
+#if 0
 	if (!color_step) {
 		write_led(pdata->led_position, pdata->background_color, pdata);
 		pdata->led_position = next_led(pdata->led_position);
@@ -161,6 +152,18 @@ static void work_update_func(struct work_struct *work)
 	} else {
 		color_step ++;
 	}
+#else
+
+	if (color_step == 1) {
+		color_step = 0;
+		for ( led_num=0; led_num<LEDS_MAX; led_num++ )
+			write_led(led_num, 0xFEFEFE, pdata);
+	} else {
+		for ( led_num=0; led_num<LEDS_MAX; led_num++ )
+			write_led(led_num, 0x000000, pdata);
+		color_step ++;
+	}
+#endif
 }
 
 static void timer_sr(unsigned long dev_id)
@@ -168,7 +171,7 @@ static void timer_sr(unsigned long dev_id)
 	struct leds_aw20072_platform_data *pdata = (struct leds_aw20072_platform_data *)dev_id;
 
 	schedule_work(&pdata->work_update);
-	mod_timer(&pdata->timer, jiffies + msecs_to_jiffies(20));
+	mod_timer(&pdata->timer, jiffies + msecs_to_jiffies(500));
 }
 
 static int leds_aw20072_reset(struct leds_aw20072_platform_data *pdata)
@@ -194,16 +197,14 @@ static int leds_aw20072_reset(struct leds_aw20072_platform_data *pdata)
 		return -ENODEV;
 	}
 
-	// set IMAX 120mA
-	pdata->imax = 0x6;
+	// set IMAX 30mA
+	pdata->imax = 0x2;
+	aw20072_i2c_write(pdata->client, 0xF0, 0xC0);
 	aw20072_i2c_read(pdata->client, 0x03, &reg_val);
 	reg_val &= (~(0xF<<4));
 	reg_val |= (pdata->imax<<4);
 	aw20072_i2c_write(pdata->client, 0x03, reg_val);
-
-	// set size 5
-	aw20072_i2c_write(pdata->client, 0x80, 0x5);
-
+	
 	// set SLPR.SLEEP 0
 	aw20072_i2c_write(pdata->client, 0x01, 0x0);
 
@@ -214,8 +215,7 @@ static int leds_aw20072_reset(struct leds_aw20072_platform_data *pdata)
 
 	// set all LEDs bright (FADE)
 	aw20072_i2c_write(pdata->client, 0xF0, 0xC2);
-	for ( i=0x0; i<=0x47; i++ )
-	{
+	for ( i=0x0; i<=0x47; i++ ){
 		aw20072_i2c_write(pdata->client, i, 0xFF);
 	}
 
@@ -225,14 +225,9 @@ static int leds_aw20072_reset(struct leds_aw20072_platform_data *pdata)
 static int leds_aw20072_led_write(unsigned int led, u32 value, struct leds_aw20072_platform_data *pdata)
 {
 	unsigned int dbuf[3];
-	unsigned int led_num;
 	unsigned int i,j;
 
-	if (led >= LEDS_MAX) {
-		return -1;
-	}
-	led_num = led;
-	pdata->led_position = led_num;
+	pdata->led_position = led;
 	
 	if (pdata->timer_run_flag) {
 		del_timer(&pdata->timer);
@@ -247,7 +242,6 @@ static int leds_aw20072_led_write(unsigned int led, u32 value, struct leds_aw200
 		{
 			if ( LEDS_MAX == i )
 				i = 0;
-			aw20072_i2c_write(pdata->client, 0xF0, 0xC1);
 			aw20072_i2c_write(pdata->client, aw_led_arry[i] + 0, 0);
 			aw20072_i2c_write(pdata->client, aw_led_arry[i] + 1, 0);
 			aw20072_i2c_write(pdata->client, aw_led_arry[i] + 2, 0);
@@ -255,19 +249,20 @@ static int leds_aw20072_led_write(unsigned int led, u32 value, struct leds_aw200
 		mutex_unlock(&pdata->aw_lock);
 
 		pdata->timer_run_flag = false;
-	}
-	
-	dbuf[0] = (value >>  0) & 0xff;dbuf[0]=dbuf[0]>>2;
-	dbuf[1] = (value >>  8) & 0xff;dbuf[1]=dbuf[1]>>2;
-	dbuf[2] = (value >> 16) & 0xff;dbuf[2]=dbuf[2]>>2;
+	}else{
+		//RGB
+		dbuf[2] = (value >> 0) & 0xff;dbuf[2]=dbuf[2]>>2;
+		dbuf[1] = (value >> 8) & 0xff;dbuf[1]=dbuf[1]>>2;
+		dbuf[0] = (value >> 16) & 0xff;dbuf[0]=dbuf[0]>>2;
+			
+		dbuf[1] = (dbuf[1]*((dbuf[1]<<2)+ 270))/1000;
+		dbuf[2] = (dbuf[2] * 38)/100;
+        dbuf[0] = (dbuf[0] * 84)/100;
 
-	mutex_lock(&pdata->aw_lock);
-	aw20072_i2c_write(pdata->client, 0xF0, 0xC1);
-	aw20072_i2c_write(pdata->client, aw_led_arry[led_num] + 0, dbuf[0]);
-	aw20072_i2c_write(pdata->client, aw_led_arry[led_num] + 1, dbuf[1]);
-	aw20072_i2c_write(pdata->client, aw_led_arry[led_num] + 2, dbuf[2]);
-	mutex_unlock(&pdata->aw_lock);
-	
+		aw20072_i2c_write(pdata->client, aw_led_arry[led] + 0, dbuf[0]);
+		aw20072_i2c_write(pdata->client, aw_led_arry[led] + 1, dbuf[1]);
+		aw20072_i2c_write(pdata->client, aw_led_arry[led] + 2, dbuf[2]);
+	}
 	return 0;
 }
 
@@ -355,7 +350,7 @@ static ssize_t led_control(struct device *dev,
 {
 	struct leds_aw20072_platform_data *pdata = dev_get_drvdata(dev);
 	unsigned int argn;
-	char *p, *para, *buf_work;
+	char *p, *para,*buf_work;
 	char *argv[2];
 	unsigned int arg1, arg2;
 	char *stop_at = NULL;
@@ -379,11 +374,13 @@ static ssize_t led_control(struct device *dev,
 	arg1 = simple_strtol(argv[0], &stop_at, 0);
 	arg2 = simple_strtol(argv[1], &stop_at, 0);
 
-	if (arg1 > (LEDS_MAX-1)) {
+	if (arg1 > 23) {
 		dev_err(dev, "[AW20072] %s : The wrong format. (Only 0 - 23 LEDs)\n", __func__);
-	} else {
-		leds_aw20072_led_write(arg1, arg2, pdata);
+		goto go_exit;
 	}
+
+	aw20072_i2c_write(pdata->client, 0xF0, 0xC1);
+	leds_aw20072_led_write(arg1, arg2, pdata);
 
 go_exit:
 	kfree(buf_work);
@@ -400,9 +397,9 @@ static ssize_t led_usage(struct device *dev,
 	len += sprintf(buff + len, "\t  echo A B > led_rgb\n");
 	len += sprintf(buff + len, "\t  Format:\n");
 	len += sprintf(buff + len, "\t  A    : 0 - 23, Max 24 LEDs\n");
-	len += sprintf(buff + len, "\t  B    : bits  0 -  7 RED Level\n");
+	len += sprintf(buff + len, "\t  B    : bits  0 -  7 BLUE Level\n");
 	len += sprintf(buff + len, "\t       : bits  8 - 15 GREEN Level\n");
-	len += sprintf(buff + len, "\t       : bits 16 - 23 BLUE Level\n");
+	len += sprintf(buff + len, "\t       : bits 16 - 23 RED Level\n");
 	
 	return len;
 }
@@ -527,8 +524,7 @@ static int leds_aw20072_module_init(struct device *dev,
                                      struct leds_aw20072_platform_data *pdata)
 {
 	int ret;
-	u32 led_num;
-
+#if 0
 	pdata->hwen_pin = of_get_named_gpio(dev->of_node, "hwen_pin", 0);
 	if ( pdata->hwen_pin < 0 ) {
 		dev_err(dev, "[AW20072] %s : get hwen pin error.\n", __func__);
@@ -550,17 +546,13 @@ static int leds_aw20072_module_init(struct device *dev,
 			return -ENODEV;
 		}
 	}
-	
+#endif	
 	ret = leds_aw20072_reset(pdata);
 	if ( ret )
 	{
 		dev_err(dev, "[AW20072] reset chip error...\n");
 		return -ENODEV;
 	}
-
-	/* Set LED */
-	for ( led_num=0; led_num<LEDS_MAX; led_num++ )
-		write_led(led_num, pdata->background_color, pdata);
 
 	return 0;
 }
@@ -569,8 +561,6 @@ static int leds_aw20072_i2c_probe(struct i2c_client *client,
                                       const struct i2c_device_id *id)
 {
 	int error;
-
-	dev_info(&client->dev, "[AW20072] %s:%x\n", __func__,client->addr);
 
 	if (client->dev.of_node)
 	{
@@ -633,7 +623,7 @@ static int leds_aw20072_i2c_probe(struct i2c_client *client,
 	{
 		INIT_WORK(&pdata->work_update, work_update_func);
 		setup_timer(&pdata->timer, timer_sr, (unsigned long)pdata);
-		mod_timer(&pdata->timer, jiffies + msecs_to_jiffies(1));
+		mod_timer(&pdata->timer, jiffies + msecs_to_jiffies(500));
 		pdata->timer_run_flag = true;
 	}
 
