@@ -184,7 +184,7 @@ int uart_read(int fd,char *r_buf,size_t len)
     ssize_t cnt = 0;
     fd_set rfds;
     struct timeval time;
-	int ret;
+	int ret,i;
 
     /*将文件描述符加入读描述符集合*/
     FD_ZERO(&rfds);
@@ -211,6 +211,9 @@ int uart_read(int fd,char *r_buf,size_t len)
                 fprintf(stderr,"read error!\n");
                 return -1;
             }
+			for (i = 0; i < cnt; i++) {
+			   printf("read : %s",r_buf);
+			}
             return cnt;
     }
 }
@@ -248,7 +251,7 @@ int display_led_state(int fd, LED_DISPLAY_STATE led_state)
 	switch(led_state)
 	{
 		case LED_IDLE :
-			snprintf(w_buf, sizeof(w_buf), "%s", "AT+IDLE");
+			snprintf(w_buf, sizeof(w_buf), "%s", "AT+IDLE\n");
 			break;
 
 		case LED_HOTWORDLISTENING :
@@ -397,6 +400,7 @@ int main(int argc, char** argv)
 	int fd = 0;
 	int ret = 0;
 	int opt = 0;
+	char rcv_buf[100];
 	const char *opts = "HVabcdefghijklmnops";
 	const struct option longopts[] = {
 			{ "help", no_argument, NULL, 'h' },
@@ -486,7 +490,9 @@ int main(int argc, char** argv)
 				display_led_state(fd, LED_VOLUME_MUTE);
 				break;
 		case 'n' :
-				display_led_state(fd, LED_UPDATE);
+				while(1){
+				   uart_read(fd, rcv_buf, 30)
+				}
 				break;
 
 		case 'o' :
