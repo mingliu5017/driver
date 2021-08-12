@@ -1,0 +1,135 @@
+100M 以太网配置
+ethmac:ethernet@0xff3f0000 {
+		compatible = "amlogic, gxbb-eth-dwmac";
+		status = "okay";
+		reg = <0x0 0xff3f0000 0x0 0x10000 0x0 0xff634540 0x0 0x8>;
+		interrupts = <0 8 1>;
+		pinctrl-names = "external_eth_pins";
+		pinctrl-0 = <&external_eth_pins>;
+		rst_pin-gpios = <&gpio GPIOX_22 0>;
+		mc_val_internal_phy = <0x1800>;
+		mc_val_external_phy = <0x1804>;
+		interrupt-names = "macirq";
+		clocks = <&clkc CLKID_ETH_CORE>;
+		clock-names = "ethclk81";
+        internal_phy = <0>;
+};
+
+ &pinctrl_periphs {
+ 	external_eth_pins:external_eth_pins {
+ 		mux {
+			groups = "eth_mdio_x",
+				"eth_mdc_x",
+				"eth_rgmii_rx_clk_x",
+				"eth_rx_dv_x",
+				"eth_rxd0_x",
+				"eth_rxd1_x",
+				"eth_txen_x",
+				"eth_txd0_x",
+				"eth_txd1_x";
+ 			function = "eth";
+ 		};
+ 	};
+
+MDC 作为复位phy 引脚
+diff --git a/arch/arm64/boot/dts/amlogic/axg_s420_v03.dts b/arch/arm64/boot/dts/amlogic/axg_s420_v03.dts
+index f066ce3e928b..b5791136117a 100755
+--- a/arch/arm64/boot/dts/amlogic/axg_s420_v03.dts
++++ b/arch/arm64/boot/dts/amlogic/axg_s420_v03.dts
+@@ -152,6 +152,7 @@
+         interrupts = <0 8 1>;
+         pinctrl-names = "external_eth_pins";
+         pinctrl-0 = <&external_eth_pins>;
++	     rst_pin-gpios = <&gpio GPIOX_22 0>;
+         mc_val_internal_phy = <0x1800>;
+         mc_val_external_phy = <0x1804>;
+         interrupt-names = "macirq";
+diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-meson.c b/drivers/net/ethernet/stmicro/stmmac/dwmac-meson.c
+index 9236e8ea44ac..ce6bd11a5a15 100644
+--- a/drivers/net/ethernet/stmicro/stmmac/dwmac-meson.c
++++ b/drivers/net/ethernet/stmicro/stmmac/dwmac-meson.c
+@@ -75,8 +75,6 @@ static void __iomem *network_interface_setup(struct platform_device *pdev)
+ 	struct device_node *np = pdev->dev.of_node;
+ 	struct device *dev = &pdev->dev;
+ 	struct gpio_desc *gdesc;
+-	struct gpio_desc *gdesc_z4;
+-	struct gpio_desc *gdesc_z5;
+ 	struct pinctrl *pin_ctl;
+ 	struct resource *res;
+ 	u32 mc_val, cali_val, internal_phy;
+@@ -141,23 +139,21 @@ static void __iomem *network_interface_setup(struct platform_device *pdev)
+ 			/* pull reset pin for resetting phy  */
+ 			gdesc = gpiod_get(&pdev->dev, "rst_pin",
+ 					  GPIOD_FLAGS_BIT_DIR_OUT);
+-			gdesc_z4 = gpiod_get(&pdev->dev, "GPIOZ4_pin",
+-					     GPIOD_FLAGS_BIT_DIR_OUT);
+-			gdesc_z5 = gpiod_get(&pdev->dev, "GPIOZ5_pin",
+-					     GPIOD_FLAGS_BIT_DIR_OUT);
+-			if (!IS_ERR(gdesc) && !IS_ERR(gdesc_z4)) {
+-				gpiod_direction_output(gdesc_z4, 0);
+-				gpiod_direction_output(gdesc_z5, 0);
++			if (!IS_ERR(gdesc)) {
+ 				gpiod_direction_output(gdesc, 0);
+-				mdelay(20);
++				mdelay(10);
+ 				gpiod_direction_output(gdesc, 1);
+-				mdelay(100);
+-				gpiod_put(gdesc_z4);
+-				gpiod_put(gdesc_z5);
++				mdelay(20);
++				gpiod_direction_output(gdesc, 0);
++				mdelay(10);
++				gpiod_put(gdesc);
+ 				pr_debug("Ethernet: gpio reset ok\n");
+ 			}
+ 			pin_ctl = devm_pinctrl_get_select
+ 				(&pdev->dev, "external_eth_pins");
++			if (IS_ERR(pin_ctl)) {
++				pr_err("Ethernet: fail to request eth pins\n");
++			}
+ 		}
+ 	} else {
+ 		pin_ctl = devm_pinctrl_get_select(&pdev->dev, "eth_pins");
+
+1000M 以太网配置
+    ethmac: ethernet@0xff3f0000 {
+            compatible = "amlogic, gxbb-eth-dwmac";
+            reg = <0x0 0xff3f0000 0x0 0x10000
+            0x0 0xff634540 0x0 0x8
+            0x0 0xff634558 0x0 0xc
+            0x0 0xffd01008 0x0 0x4>;
+            interrupts = <0 8 1>;
+            pinctrl-names = "external_eth_pins";
+            pinctrl-0 = <&external_eth_pins>;
+            mc_val_internal_phy = <0x1800>;
+            mc_val_external_phy = <0x1621>;
+            interrupt-names = "macirq";
+            clocks = <&clkc CLKID_ETH_CORE>;
+            clock-names = "ethclk81";
+            internal_phy=<0>;
+    };
+
+    external_eth_pins:external_eth_pins {
+        mux {
+            groups = "eth_mdio_y",
+                "eth_mdc_y",
+                "eth_rgmii_rx_clk_y",
+                "eth_rx_dv_y",
+                "eth_rxd0_y",
+                "eth_rxd1_y",
+                "eth_rxd2_rgmii",
+                "eth_rxd3_rgmii",
+                "eth_rgmii_tx_clk",
+                "eth_txen_y",
+                "eth_txd0_y",
+                "eth_txd1_y",
+                "eth_txd2_rgmii",
+                "eth_txd3_rgmii";
+            function = "eth";
+        };
+    };
+	
+	
+
+
+	
