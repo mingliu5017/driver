@@ -1,0 +1,11 @@
+example for dts:
+	es7243e_14: es7243e_14@14 {
+		compatible = "MicArray_0";
+		#sound-dai-cells = <0>;
+		reg = <0x14>;
+		status = "okay";
+
+		workmode = <0>; //0: i2s  1:left_adjust
+		mclkinv = <0>;	//0: normal  1:clk inverted
+		bclkinv = <1>;  //0: normal  1:clk inverted
+	};
